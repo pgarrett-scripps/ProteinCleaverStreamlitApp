@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 from peptacular.sequence import digest_sequence, identify_cleavage_sites, calculate_mass, add_static_mods
-from peptacular.constants import PROTEASES
+from peptacular.constants import PROTEASES, AMINO_ACIDS
 
 st.set_page_config(page_title="proteindigestor", page_icon=":knife:")
 
@@ -33,6 +33,12 @@ with st.sidebar:
     sequence = st.text_input("sequence to be digested", value=example_protein)
     sequence = sequence.replace(' ', '').replace('\n', '')
 
+    #check if all residues are valid
+    for aa in sequence:
+        if aa not in AMINO_ACIDS:
+            st.error(f'Invalid amino acid: {aa}')
+            st.stop()
+
     protease_selected = st.selectbox("Select the Protease", options=list(PROTEASES.keys()))
     enzyme_regexes = PROTEASES[protease_selected]
 
@@ -53,7 +59,7 @@ with st.sidebar:
         st.stop()
 
     missed_cleavages = st.number_input('Max number of missed cleavages', min_value=0, value=1, step=1)
-    semi_enzymatic = st.checkbox('Enable Semi Enzymatic?')
+    semi_enzymatic = st.checkbox('Semi Enzymatic?')
 
     st.subheader('Static Modifications')
 
@@ -95,16 +101,15 @@ digested_sequences, mc_status, semi_status = digest_sequence(sequence, enzyme_re
                                                              max_len, semi_enzymatic, info=True)
 df = pd.DataFrame()
 df['Sequence'] = list(digested_sequences)
-df['Missed Cleavages'] = list(mc_status)
-df['Semi Enzymatic'] = list(semi_status)
+df['MC'] = list(mc_status)
+df['Semi'] = list(semi_status)
 #make bool
-df['Semi Enzymatic'] = df['Semi Enzymatic'].apply(lambda x: bool(x))
-df['Neutral Mass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
-df = df[(df['Neutral Mass'] >= min_mass) & (df['Neutral Mass'] <= max_mass)]
-df['Length'] = df['Sequence'].apply(len)
+df['Semi'] = df['Semi'].apply(lambda x: bool(x))
+df['Mass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
+df = df[(df['Mass'] >= min_mass) & (df['Mass'] <= max_mass)]
+df['Len'] = df['Sequence'].apply(len)
 df['Start'] = df['Sequence'].apply(lambda x: sequence.find(x))
-df['End'] = df['Start'] + df['Length']
-df.sort_values(by=['Start', 'End'], inplace=True)
+df.sort_values(by=['Start', 'Len'], inplace=True)
 
 df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
 
