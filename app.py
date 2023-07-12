@@ -24,7 +24,7 @@ example_protein = "HRNGEMYACEQEHDKEPHMKIMPHGSGGFFPLVQFGRHFGQLKNLKRPAVHVDTEVLYWCN
                   "VDDHHDLKQCVMISSWSTPYCKIPNCAAEQWMETMTMPWDWPPMFIKIVIASDRCVVLHPQLGLHAHGMTRWATTVRKGKIGFYDPGPNMCYWQQQWL" \
                   "FTVAGS"
 
-LINK = 'http://localhost:8501/'
+LINK = 'https://peptidefragmenter.streamlit.app/'
 
 with st.sidebar:
     st.title('Protein Digestion')
