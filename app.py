@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from peptacular.sequence import digest_sequence, identify_cleavage_sites, calculate_mass
+from peptacular.sequence import digest_sequence, identify_cleavage_sites, calculate_mass, add_static_mods
 from peptacular.constants import PROTEASES
 
 st.set_page_config(page_title="proteindigestor", page_icon=":knife:")
@@ -28,6 +28,7 @@ LINK = 'https://peptidefragmenter.streamlit.app/'
 
 with st.sidebar:
     st.title('Protein Digestion')
+    st.markdown("""Digests a protein into peptides according to a protease of your choice.""")
 
     sequence = st.text_input("sequence to be digested", value=example_protein)
     sequence = sequence.replace(' ', '').replace('\n', '')
@@ -54,6 +55,32 @@ with st.sidebar:
     missed_cleavages = st.number_input('Max number of missed cleavages', min_value=0, value=1, step=1)
     semi_enzymatic = st.checkbox('Enable Semi Enzymatic?')
 
+    st.subheader('Static Modifications')
+
+    # a selection for the user to specify the number of rows
+    c1, c2 = st.columns(2)
+    num_rows = st.number_input('Add Modification', min_value=1, value=1, step=1)
+
+    # columns to lay out the inputs
+    grid = st.columns([3,2])
+
+    # Function to create a row of widgets (with row number input to assure unique keys)
+    def add_row(row):
+        with grid[0]:
+            st.multiselect('Residues', key=f'residues{row}', options=list('ACDEFGHIKLMNPQRSTVWY'))
+        with grid[1]:
+            st.number_input('Mass', step=0.01, key=f'mass{row}')
+
+
+    # Loop to create rows of input widgets
+    for r in range(num_rows):
+        add_row(r)
+
+    mods = {}
+    for r in range(num_rows):
+        for residue in st.session_state[f'residues{r}']:
+            mods[residue] = st.session_state[f'mass{r}']
+
 sites = identify_cleavage_sites(sequence, enzyme_regexes)
 sites = sorted(sites, reverse=True)
 sequence_with_sites = sequence
@@ -78,6 +105,8 @@ df['Length'] = df['Sequence'].apply(len)
 df['Start'] = df['Sequence'].apply(lambda x: sequence.find(x))
 df['End'] = df['Start'] + df['Length']
 df.sort_values(by=['Start', 'End'], inplace=True)
+
+df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
 
 df_download = df.to_csv(index=False)
 
