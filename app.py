@@ -1,3 +1,5 @@
+import copy
+
 import pandas as pd
 import streamlit as st
 from peptacular.sequence import digest_sequence, identify_cleavage_sites, calculate_mass, add_static_mods
@@ -15,9 +17,10 @@ hide_table_row_index = """
 
 # Inject CSS with Markdown
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
-
+VALID_PROTEASES = copy.deepcopy(PROTEASES)
+VALID_PROTEASES.pop('non-specific', None)
 with st.expander('Protease Regexes'):
-    st.write(PROTEASES)
+    st.write(VALID_PROTEASES)
 
 example_protein = "HRNGEMYACEQEHDKEPHMKIMPHGSGGFFPLVQFGRHFGQLKNLKRPAVHVDTEVLYWCNTRCEFLMWAFDCRIDPRDWGMDHMHCRESRCYASFRG" \
                   "TRGFDNLFYPAKHLEMHGTMISIMQWFQANGDKTLHSTYKFMSPCSGEKRMYQSWKWGEKPRCYSTQHVYCAVDKRMSVWSKCFSQGKALGTKESLNN" \
@@ -39,12 +42,12 @@ with st.sidebar:
             st.error(f'Invalid amino acid: {aa}')
             st.stop()
 
-    protease_selected = st.selectbox("Select the Protease", options=list(PROTEASES.keys()))
-    enzyme_regexes = PROTEASES[protease_selected]
+    protease_selected = st.selectbox("Select the Protease", options=list(VALID_PROTEASES.keys()))
+    enzyme_regexes = VALID_PROTEASES[protease_selected]
 
     c1, c2 = st.columns(2)
     min_len = c1.number_input('Min peptide length', min_value=1, value=7, step=1)
-    max_len = c2.number_input('Max peptide length', min_value=1, value=30, step=1)
+    max_len = c2.number_input('Max peptide length', min_value=1, value=25, step=1)
 
     if min_len > max_len:
         st.error('Min length must be less than max length')
@@ -52,7 +55,7 @@ with st.sidebar:
 
     c3, c4 = st.columns(2)
     min_mass = c3.number_input('Min peptide mass', min_value=0, value=200, step=100)
-    max_mass = c4.number_input('Max peptide mass', min_value=0, value=4000, step=100)
+    max_mass = c4.number_input('Max peptide mass', min_value=0, value=3000, step=100)
 
     if min_mass > max_mass:
         st.error('Min mass must be less than max mass')
@@ -105,11 +108,12 @@ df['MC'] = list(mc_status)
 df['Semi'] = list(semi_status)
 #make bool
 df['Semi'] = df['Semi'].apply(lambda x: bool(x))
-df['Mass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
-df = df[(df['Mass'] >= min_mass) & (df['Mass'] <= max_mass)]
+df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
+df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
 df['Len'] = df['Sequence'].apply(len)
-df['Start'] = df['Sequence'].apply(lambda x: sequence.find(x))
-df.sort_values(by=['Start', 'Len'], inplace=True)
+df.drop_duplicates(inplace=True)
+#df['Start'] = df['Sequence'].apply(lambda x: sequence.find(x))
+df.sort_values(by=['NeutralMass'], inplace=True)
 
 df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
 
