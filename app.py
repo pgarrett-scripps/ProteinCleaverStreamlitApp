@@ -83,12 +83,12 @@ LINK = 'https://peptidefragmenter.streamlit.app/'
 
 
 with st.sidebar:
-    st.title('Protein Digestion')
-    st.markdown("""Digests a protein into peptides according to a protease of your choice.""")
+    st.title('Protein Digester')
+    st.markdown("""Digests a protein sequence into peptides according to a protease.""")
 
     st.markdown("""Protein sequence can be in fasta format, where the sequence is split into multiple lines.""")
 
-    sequence = st.text_input("sequence to be digested", value=example_protein, help='Enter a protein sequence')
+    sequence = st.text_input("Sequence to be digested", value=example_protein, help='Enter a protein sequence')
     sequence = sequence.replace(' ', '').replace('\n', '')
 
     #check if all residues are valid
@@ -154,7 +154,7 @@ for site in sites:
 # color all | in red
 sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">%</span>')
 
-st.subheader('Sequence with cleavage sites')
+st.subheader('Cleavage Sites')
 st.markdown(sequence_with_sites, unsafe_allow_html=True)
 
 digested_sequences, mc_status, semi_status, start_indexes = digest_sequence(sequence, enzyme_regexes, missed_cleavages, min_len,
@@ -192,7 +192,7 @@ def make_clickable(sequence):
 df['Sequence'] = df['Sequence'].apply(make_clickable)
 df = df.to_html(escape=False)
 
-st.subheader('Peptide Results')
+st.subheader('Peptides')
 st.caption('Click on a sequence to see the fragment ions!')
 st.write(df, unsafe_allow_html=True, use_container_width=True)
 st.write(' ')
