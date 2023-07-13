@@ -1,9 +1,60 @@
 import copy
+from typing import Union, List
 
 import pandas as pd
 import streamlit as st
-from peptacular.sequence import digest_sequence, identify_cleavage_sites, calculate_mass, add_static_mods
+from peptacular.sequence import identify_cleavage_sites, calculate_mass, add_static_mods, \
+    _digest_sequence, get_non_enzymatic_sequences, get_semi_sequences, get_left_semi_sequences, get_right_semi_sequences
 from peptacular.constants import PROTEASES, AMINO_ACIDS
+
+def digest_sequence(sequence: str, enzyme_regex: str, missed_cleavages: int, min_len: int,
+                    max_len: int, semi_enzymatic: bool):
+    """
+    A function that digests a given amino acid sequence based on the provided positive and negative regular expressions and
+    the number of missed cleavages. It returns a list of tuples containing the digested_sequences and the number of missed
+    cleavages. The returned digested_sequences will be filtered based on the provided minimum and maximum length.
+    """
+
+
+    digested_sequences, mc_status, semi_status, start_indexes = [], [], [], []
+
+    cleavage_sites = identify_cleavage_sites(sequence, enzyme_regex)
+    sequences, spans = _digest_sequence(sequence, cleavage_sites, missed_cleavages, min_len, max_len)
+
+    digested_sequences.extend(sequences)
+    mc_status.extend([span[2] for span in spans])
+    semi_status.extend([0 for _ in range(len(sequences))])
+    start_indexes.extend([span[0] for span in spans])
+
+    if semi_enzymatic is True:
+        semi_sequences, semi_mc_status, semi_semi_status, semi_starts = [], [], [], []
+        for sequence, mc, start in zip(sequences, mc_status, start_indexes):
+
+            semi_left_sequences, semi_left_offsets = get_left_semi_sequences(sequence, min_len, max_len, info=True)
+            semi_sequences.extend(semi_left_sequences)
+            semi_mc_status.extend([mc for _ in range(len(semi_left_sequences))])
+            semi_semi_status.extend([1 for _ in range(len(semi_left_sequences))])
+            semi_starts.extend([start for offset in semi_left_offsets])
+
+            semi_right_sequences, semi_right_offsets = get_right_semi_sequences(sequence, min_len, max_len, info=True)
+            semi_sequences.extend(semi_right_sequences)
+            semi_mc_status.extend([mc for _ in range(len(semi_right_sequences))])
+            semi_semi_status.extend([1 for _ in range(len(semi_right_sequences))])
+            semi_starts.extend([start + len(sequence) + offset for offset in semi_right_offsets])
+
+        digested_sequences.extend(semi_sequences)
+        mc_status.extend(semi_mc_status)
+        semi_status.extend(semi_semi_status)
+        start_indexes.extend(semi_starts)
+
+    # filter based on min / max len
+    flags = [max_len >= len(sequence) >= min_len for sequence in digested_sequences]
+    digested_sequences = [sequence for sequence, flag in zip(digested_sequences, flags) if flag is True ]
+    mc_status = [mc for mc, flag in zip(mc_status, flags) if flag is True ]
+    semi_status = [semi for semi, flag in zip(semi_status, flags) if flag is True ]
+    start_indexes = [semi for semi, flag in zip(start_indexes, flags) if flag is True ]
+
+    return digested_sequences, mc_status, semi_status, start_indexes
 
 st.set_page_config(page_title="proteindigestor", page_icon=":knife:")
 
@@ -100,22 +151,23 @@ for site in sites:
 sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">%</span>')
 st.markdown(sequence_with_sites, unsafe_allow_html=True)
 
-digested_sequences, mc_status, semi_status = digest_sequence(sequence, enzyme_regexes, missed_cleavages, min_len,
-                                                             max_len, semi_enzymatic, info=True)
+digested_sequences, mc_status, semi_status, start_indexes = digest_sequence(sequence, enzyme_regexes, missed_cleavages, min_len,
+                                                             max_len, semi_enzymatic)
 df = pd.DataFrame()
 df['Sequence'] = list(digested_sequences)
 df['MC'] = list(mc_status)
 df['Semi'] = list(semi_status)
+df['Start'] = start_indexes
+
 #make bool
 df['Semi'] = df['Semi'].apply(lambda x: bool(x))
+df.drop_duplicates(inplace=True)
+df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
+
 df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
 df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
 df['Len'] = df['Sequence'].apply(len)
-df.drop_duplicates(inplace=True)
-#df['Start'] = df['Sequence'].apply(lambda x: sequence.find(x))
-df.sort_values(by=['NeutralMass'], inplace=True)
-
-df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
+df.sort_values(by=['Start','Len'], inplace=True)
 
 df_download = df.to_csv(index=False)
 
