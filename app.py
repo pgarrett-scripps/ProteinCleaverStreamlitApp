@@ -1,11 +1,14 @@
 import copy
-from typing import Union, List
 
 import pandas as pd
 import streamlit as st
 from peptacular.sequence import identify_cleavage_sites, calculate_mass, add_static_mods, \
-    _digest_sequence, get_non_enzymatic_sequences, get_semi_sequences, get_left_semi_sequences, get_right_semi_sequences
+    _digest_sequence, get_left_semi_sequences, get_right_semi_sequences
 from peptacular.constants import PROTEASES, AMINO_ACIDS
+
+st.set_page_config(page_title="proteindigestor", page_icon=":knife:")
+
+st.warning('This is a work in progress. Please report any issues or suggestions to pgarrett@scripps.edu.')
 
 def digest_sequence(sequence: str, enzyme_regex: str, missed_cleavages: int, min_len: int,
                     max_len: int, semi_enzymatic: bool):
@@ -56,8 +59,6 @@ def digest_sequence(sequence: str, enzyme_regex: str, missed_cleavages: int, min
 
     return digested_sequences, mc_status, semi_status, start_indexes
 
-st.set_page_config(page_title="proteindigestor", page_icon=":knife:")
-
 # CSS to inject contained in a string
 hide_table_row_index = """
             <style>
@@ -80,11 +81,14 @@ example_protein = "HRNGEMYACEQEHDKEPHMKIMPHGSGGFFPLVQFGRHFGQLKNLKRPAVHVDTEVLYWCN
 
 LINK = 'https://peptidefragmenter.streamlit.app/'
 
+
 with st.sidebar:
     st.title('Protein Digestion')
     st.markdown("""Digests a protein into peptides according to a protease of your choice.""")
 
-    sequence = st.text_input("sequence to be digested", value=example_protein)
+    st.markdown("""Protein Sequence in can be in fasta format, where the protein sequence is split into multiple lines.""")
+
+    sequence = st.text_input("sequence to be digested", value=example_protein, help='Enter a protein sequence')
     sequence = sequence.replace(' ', '').replace('\n', '')
 
     #check if all residues are valid
@@ -93,33 +97,33 @@ with st.sidebar:
             st.error(f'Invalid amino acid: {aa}')
             st.stop()
 
-    protease_selected = st.selectbox("Select the Protease", options=list(VALID_PROTEASES.keys()))
+    protease_selected = st.selectbox("Select the Protease", options=list(VALID_PROTEASES.keys()), help='Select a protease')
     enzyme_regexes = VALID_PROTEASES[protease_selected]
 
     c1, c2 = st.columns(2)
-    min_len = c1.number_input('Min peptide length', min_value=1, value=7, step=1)
-    max_len = c2.number_input('Max peptide length', min_value=1, value=25, step=1)
+    min_len = c1.number_input('Min peptide length', min_value=1, value=7, step=1, help='Minimum peptide length')
+    max_len = c2.number_input('Max peptide length', min_value=1, value=25, step=1, help='Maximum peptide length')
 
     if min_len > max_len:
         st.error('Min length must be less than max length')
         st.stop()
 
     c3, c4 = st.columns(2)
-    min_mass = c3.number_input('Min peptide mass', min_value=0, value=200, step=100)
-    max_mass = c4.number_input('Max peptide mass', min_value=0, value=3000, step=100)
+    min_mass = c3.number_input('Min peptide mass', min_value=0, value=200, step=100, help='Minimum peptide mass')
+    max_mass = c4.number_input('Max peptide mass', min_value=0, value=3000, step=100, help = 'Maximum peptide mass')
 
     if min_mass > max_mass:
         st.error('Min mass must be less than max mass')
         st.stop()
 
-    missed_cleavages = st.number_input('Max number of missed cleavages', min_value=0, value=1, step=1)
-    semi_enzymatic = st.checkbox('Semi Enzymatic?')
+    missed_cleavages = st.number_input('Max number of missed cleavages', min_value=0, value=1, step=1, help='Maximum number of missed cleavages')
+    semi_enzymatic = st.checkbox('Semi Enzymatic?', help='Allow semi enzymatic peptides?')
 
     st.subheader('Static Modifications')
 
     # a selection for the user to specify the number of rows
     c1, c2 = st.columns(2)
-    num_rows = st.number_input('Add Modification', min_value=1, value=1, step=1)
+    num_rows = st.number_input('Add Modification', min_value=1, value=1, step=1, help='Add another modification row')
 
     # columns to lay out the inputs
     grid = st.columns([3,2])
@@ -127,9 +131,9 @@ with st.sidebar:
     # Function to create a row of widgets (with row number input to assure unique keys)
     def add_row(row):
         with grid[0]:
-            st.multiselect('Residues', key=f'residues{row}', options=list('ACDEFGHIKLMNPQRSTVWY'))
+            st.multiselect('Residues', key=f'residues{row}', options=list('ACDEFGHIKLMNPQRSTVWY'), help='Select residues to modify')
         with grid[1]:
-            st.number_input('Mass', step=0.01, key=f'mass{row}')
+            st.number_input('Mass', step=0.01, key=f'mass{row}', help='Modification mass')
 
 
     # Loop to create rows of input widgets
@@ -149,6 +153,8 @@ for site in sites:
 
 # color all | in red
 sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">%</span>')
+
+st.subheader('Sequence with cleavage sites')
 st.markdown(sequence_with_sites, unsafe_allow_html=True)
 
 digested_sequences, mc_status, semi_status, start_indexes = digest_sequence(sequence, enzyme_regexes, missed_cleavages, min_len,
@@ -167,6 +173,10 @@ df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
 df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
 df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
 df['Len'] = df['Sequence'].apply(len)
+
+# keep first fuplicate
+df.sort_values(by=['MC'], inplace=True)
+df.drop_duplicates(subset=['Sequence', 'Semi'], inplace=True)
 df.sort_values(by=['Start','Len'], inplace=True)
 
 df_download = df.to_csv(index=False)
@@ -182,6 +192,8 @@ def make_clickable(sequence):
 df['Sequence'] = df['Sequence'].apply(make_clickable)
 df = df.to_html(escape=False)
 
+st.subheader('Peptide Results')
+st.caption('Click on a sequence to see the fragment ions!')
 st.write(df, unsafe_allow_html=True, use_container_width=True)
 st.write(' ')
 st.download_button('Download CSV', df_download, 'digestion.csv', 'text/csv', use_container_width=True)
