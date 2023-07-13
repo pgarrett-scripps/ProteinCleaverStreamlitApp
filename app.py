@@ -176,12 +176,10 @@ def make_clickable(sequence):
     # target _blank to open new window
     # extract clickable text to display for your link
     link = LINK + f'?sequence={sequence}'
-    print(link)
     return f'<a target="_blank" href="{link}">{sequence}</a>'
 
 # link is the column with hyperlinks
 df['Sequence'] = df['Sequence'].apply(make_clickable)
-#df['Link'] = df['Sequence'].apply(lambda x: LINK + f'?sequence={x}')
 df = df.to_html(escape=False)
 
 st.write(df, unsafe_allow_html=True, use_container_width=True)
