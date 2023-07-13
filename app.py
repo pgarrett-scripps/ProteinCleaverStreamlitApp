@@ -86,7 +86,7 @@ with st.sidebar:
     st.title('Protein Digestion')
     st.markdown("""Digests a protein into peptides according to a protease of your choice.""")
 
-    st.markdown("""Protein Sequence in can be in fasta format, where the protein sequence is split into multiple lines.""")
+    st.markdown("""Protein sequence can be in fasta format, where the sequence is split into multiple lines.""")
 
     sequence = st.text_input("sequence to be digested", value=example_protein, help='Enter a protein sequence')
     sequence = sequence.replace(' ', '').replace('\n', '')
