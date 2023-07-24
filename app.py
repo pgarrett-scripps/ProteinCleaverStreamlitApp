@@ -8,6 +8,8 @@ from constants import MAX_PROTEIN_LEN, VALID_PROTEASES, EXAMPLE_PROTEIN, MAX_PEP
     MAX_MISSED_CLEAVAGES
 from util import make_clickable, generate_peptide_df
 
+# TODO: add color gradient to protein coverage to show the most covered regions
+
 st.set_page_config(page_title="proteincleaver", page_icon=":knife:")
 st.warning('This is a work in progress. Please report any issues or suggestions to pgarrett@scripps.edu.')
 
@@ -27,10 +29,11 @@ with st.expander('Protease Regexes'):
 with st.sidebar:
     st.title('Protein Cleaver 🔪')
     st.markdown("""
-    **Protein Cleaver** is a tool designed to dissect protein sequences into peptide segments based on the action of a specified protease. This simulates the process of protein digestion, facilitating in-depth analysis and research in proteomics.
+    **Protein Cleaver** is an app to compute protease-specific cleavage sites and peptides.
     """)
     st.markdown("""
-    You can input your protein sequence in the well-known **FASTA format**. Don't worry if the sequence spans multiple lines - Protein Cleaver will handle it seamlessly. Get started and unveil the peptides!
+    You can input your protein sequence in the well-known **FASTA format**. Don't worry if the sequence spans multiple 
+    lines - Protein Cleaver will handle it seamlessly. Get started and unveil the peptides!
     """)
 
     sequence = st.text_area("Sequence to be digested", value=EXAMPLE_PROTEIN, help='Enter a protein sequence',
@@ -120,13 +123,13 @@ for site in sites[::-1]:
 sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">%</span>')
 
 # make bool
-df['Semi'] = df['Semi'].apply(lambda x: bool(x))
+df['IsSemi'] = df['IsSemi'].apply(lambda x: bool(x))
 df.drop_duplicates(inplace=True)
 df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
 
 df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
 df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
-df['Len'] = df['Sequence'].apply(len)
+df['PeptideLength'] = df['Sequence'].apply(len)
 
 protein_cov_arr = calculate_protein_coverage(sequence, [strip_modifications(seq) for seq in df['Sequence']])
 
@@ -141,9 +144,9 @@ for i, aa in enumerate(sequence):
 protein_cov_perc = round(sum(protein_cov_arr) / len(protein_cov_arr) * 100, 2)
 
 # keep first fuplicate
-df.sort_values(by=['MC'], inplace=True)
-df.drop_duplicates(subset=['Sequence', 'Semi'], inplace=True)
-df.sort_values(by=['Start', 'Len'], inplace=True)
+df.sort_values(by=['MissedCleavages'], inplace=True)
+df.drop_duplicates(subset=['Sequence', 'IsSemi'], inplace=True)
+df.sort_values(by=['StartIndex', 'PeptideLength'], inplace=True)
 
 df_download = df.to_csv(index=False)
 
@@ -157,8 +160,8 @@ c1.metric('Cleavage Sites', len(sites))
 c2.metric('Total Peptides', len(df))
 c3.metric('Unique Peptides', len(df.drop_duplicates(subset=['Sequence'])))
 c1, c2, c3 = st.columns(3)
-c1.metric('Semi Peptides', len(df[df['Semi'] == True]))
-c2.metric('Enzymatic Peptides', len(df[df['Semi'] == False]))
+c1.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
+c2.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
 c3.metric('Protein Coverage', f'{protein_cov_perc}%')
 
 with st.expander('Protein Coverage'):

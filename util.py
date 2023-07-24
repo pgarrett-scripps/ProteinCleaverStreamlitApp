@@ -18,19 +18,19 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
                         max_len: int, semi_enzymatic: bool):
     cleavage_sites = sorted(cleavage_sites)
     spans = get_enzymatic_spans(len(sequence), cleavage_sites, missed_cleavages, None, None)
-    df = pd.DataFrame(spans, columns=['Start', 'End', 'MC'])
-    df['Sequence'] = df.apply(lambda x: sequence[x['Start']:x['End']], axis=1)
-    df['Semi'] = 0
+    df = pd.DataFrame(spans, columns=['StartIndex', 'EndIndex', 'MissedCleavages'])
+    df['Sequence'] = df.apply(lambda x: sequence[x['StartIndex']:x['EndIndex']], axis=1)
+    df['IsSemi'] = 0
     df = df[(df['Sequence'].str.len() >= min_len) & (df['Sequence'].str.len() <= max_len)]
 
     if semi_enzymatic is True:
         semi_spans = get_semi_spans(spans, min_len, max_len)
-        semi_df = pd.DataFrame(semi_spans, columns=['Start', 'End', 'MC'])
-        semi_df['Sequence'] = semi_df.apply(lambda x: sequence[x['Start']:x['End']], axis=1)
-        semi_df['Semi'] = 1
+        semi_df = pd.DataFrame(semi_spans, columns=['StartIndex', 'EndIndex', 'MissedCleavages'])
+        semi_df['Sequence'] = semi_df.apply(lambda x: sequence[x['StartIndex']:x['EndIndex']], axis=1)
+        semi_df['IsSemi'] = 1
         df = pd.concat([df, semi_df], ignore_index=True)
 
-    df = df.sort_values(by=['Start', 'End'])
-    df['Len'] = df['Sequence'].str.len()
+    df = df.sort_values(by=['StartIndex', 'EndIndex'])
+    df['PeptideLength'] = df['Sequence'].str.len()
 
     return df
