@@ -78,11 +78,9 @@ with st.sidebar:
 
     c1, c2 = st.columns(2)
     mass_type = c1.radio('Mass type', options=['monoisotopic', 'average'], index=0,
-                             help='Mass type to use for calculations')
+                         help='Mass type to use for calculations')
     is_mono = mass_type == 'monoisotopic'
-    semi_enzymatic = c2.checkbox('Semi Enzymatic?', help='Allow semi enzymatic peptides?')
-
-
+    semi_enzymatic = c2.checkbox('Semi enzymatic?', help='Allow semi enzymatic peptides?')
 
     st.subheader('Static Modifications')
 
@@ -96,18 +94,18 @@ with st.sidebar:
     def add_row(row):
         if row  == 0:
             with grid[0]:
-                st.multiselect('Amino acids to modify', key=f'residues{row}', options=list(AMINO_ACIDS),
-                               help='Select residues to modify', default=['C'])
+                st.multiselect('Amino acids', key=f'residues{row}', options=list(AMINO_ACIDS),
+                               help='Select amino acids for which to apply the static modification', default=['C'])
             with grid[1]:
-                st.number_input('Modification Mass', step=0.00001, key=f'mass{row}', help='Modification mass',
-                                value=57.02146, format='%.5f')
+                st.number_input('Modification Mass (Da)', step=0.00001, key=f'mass{row}',
+                                help='The mass of the modification (in daltons)', value=57.02146, format='%.5f')
         else:
             with grid[0]:
-                st.multiselect('Amino acids to modify', key=f'residues{row}', options=list(AMINO_ACIDS),
-                               help='Select residues to modify')
+                st.multiselect('Amino acids', key=f'residues{row}', options=list(AMINO_ACIDS),
+                               help='Select amino acids for which to apply the static modification')
             with grid[1]:
-                st.number_input('Modification Mass', step=0.00001, key=f'mass{row}', help='Modification mass',
-                                format='%.5f')
+                st.number_input('Modification Mass (Da)', step=0.00001, key=f'mass{row}',
+                                help='The mass of the modification (in daltons)', format='%.5f')
 
 
     # Loop to create rows of input widgets
