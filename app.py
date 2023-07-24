@@ -1,3 +1,4 @@
+import numpy as np
 import streamlit as st
 from peptacular.protein import calculate_protein_coverage
 from peptacular.sequence import identify_cleavage_sites, add_static_mods, strip_modifications
@@ -11,7 +12,6 @@ from util import make_clickable, generate_peptide_df
 # TODO: add color gradient to protein coverage to show the most covered regions
 
 st.set_page_config(page_title="proteincleaver", page_icon=":knife:")
-st.warning('This is a work in progress. Please report any issues or suggestions to pgarrett@scripps.edu.')
 
 # CSS to inject contained in a string
 hide_table_row_index = """
@@ -23,9 +23,6 @@ hide_table_row_index = """
 # Inject CSS with Markdown
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 
-with st.expander('Protease Regexes'):
-    st.write(VALID_PROTEASES)
-
 with st.sidebar:
     st.title('Protein Cleaver 🔪')
     st.markdown("""
@@ -36,7 +33,7 @@ with st.sidebar:
     lines - Protein Cleaver will handle it seamlessly. Get started and unveil the peptides!
     """)
 
-    sequence = st.text_area("Sequence to be digested", value=EXAMPLE_PROTEIN, help='Enter a protein sequence',
+    sequence = st.text_area("Protein sequence", value=EXAMPLE_PROTEIN, help='An amino acid sequence to digest',
                             max_chars=MAX_PROTEIN_LEN)
     sequence = sequence.replace(' ', '').replace('\n', '')
     st.caption(f'Length: {len(sequence)}')
@@ -53,16 +50,17 @@ with st.sidebar:
 
     c1, c2 = st.columns(2)
     proteases_selected = c1.multiselect("Select Proteases", options=list(VALID_PROTEASES.keys()),
-                                        help='Select a protease', default=['trypsin'])
+                                        help='The proteases to use for digestion', default=['trypsin'])
     enzyme_regexes = [VALID_PROTEASES[protease] for protease in proteases_selected]
-    missed_cleavages = c2.number_input('Max number of missed cleavages', min_value=0, max_value=MAX_MISSED_CLEAVAGES,
-                                       value=1, step=1, help='Maximum number of missed cleavages')
+    missed_cleavages = c2.number_input('Max number of missed cleavages', min_value=0,
+                                       max_value=MAX_MISSED_CLEAVAGES, value=1, step=1,
+                                       help='Maximum number of missed cleavages to allow')
 
     c1, c2 = st.columns(2)
     min_len = c1.number_input('Min peptide length', min_value=1, max_value=MAX_PEPTIDE_LEN, value=7, step=1,
-                              help='Minimum peptide length')
+                              help='Minimum peptide length (inclusive)')
     max_len = c2.number_input('Max peptide length', min_value=1, max_value=MAX_PEPTIDE_LEN, value=25, step=1,
-                              help='Maximum peptide length')
+                              help='Maximum peptide length (inclusive)')
 
     if min_len > max_len:
         st.error('Min length must be less than max length')
@@ -70,9 +68,9 @@ with st.sidebar:
 
     c3, c4 = st.columns(2)
     min_mass = c3.number_input('Min peptide mass', min_value=0, max_value=MAX_PEPTIDE_MASS, value=200, step=100,
-                               help='Minimum peptide mass')
+                               help='Minimum peptide mass (inclusive)')
     max_mass = c4.number_input('Max peptide mass', min_value=0, max_value=MAX_PEPTIDE_MASS, value=3000, step=100,
-                               help='Maximum peptide mass')
+                               help='Maximum peptide mass (inclusive)')
 
     if min_mass > max_mass:
         st.error('Min mass must be less than max mass')
@@ -84,19 +82,26 @@ with st.sidebar:
 
     # a selection for the user to specify the number of rows
     c1, c2 = st.columns(2)
-    num_rows = st.number_input('Add Modification', min_value=1, value=1, step=1, help='Add another modification row')
+    num_rows = st.number_input('Number of unique modifications', min_value=0, value=1, step=1, help='Add another modification row')
 
     # columns to lay out the inputs
     grid = st.columns([3, 2])
 
-
-    # Function to create a row of widgets (with row number input to assure unique keys)
     def add_row(row):
-        with grid[0]:
-            st.multiselect('Residues', key=f'residues{row}', options=list('ACDEFGHIKLMNPQRSTVWY'),
-                           help='Select residues to modify')
-        with grid[1]:
-            st.number_input('Mass', step=0.01, key=f'mass{row}', help='Modification mass')
+        if row  == 0:
+            with grid[0]:
+                st.multiselect('Amino acids to modify', key=f'residues{row}', options=list(AMINO_ACIDS),
+                               help='Select residues to modify', default=['C'])
+            with grid[1]:
+                st.number_input('Modification Mass', step=0.000001, key=f'mass{row}', help='Modification mass',
+                                value=57.021464, format='%.6f')
+        else:
+            with grid[0]:
+                st.multiselect('Amino acids to modify', key=f'residues{row}', options=list(AMINO_ACIDS),
+                               help='Select residues to modify')
+            with grid[1]:
+                st.number_input('Modification Mass', step=0.000001, key=f'mass{row}', help='Modification mass',
+                                format='%.6f')
 
 
     # Loop to create rows of input widgets
@@ -106,7 +111,7 @@ with st.sidebar:
     mods = {}
     for r in range(num_rows):
         for residue in st.session_state[f'residues{r}']:
-            mods[residue] = st.session_state[f'mass{r}']
+            mods[residue] = "{:.6f}".format(st.session_state[f'mass{r}'])
 
 sites = set()
 for enzyme_regex in enzyme_regexes:
@@ -125,13 +130,12 @@ sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">
 # make bool
 df['IsSemi'] = df['IsSemi'].apply(lambda x: bool(x))
 df.drop_duplicates(inplace=True)
-df['Sequence'] = df['Sequence'].apply(lambda x: add_static_mods(x, mods))
+df['PeptideSequence'] = df['PeptideSequence'].apply(lambda x: add_static_mods(x, mods))
 
-df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['Sequence']]
+df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['PeptideSequence']]
 df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
-df['PeptideLength'] = df['Sequence'].apply(len)
 
-protein_cov_arr = calculate_protein_coverage(sequence, [strip_modifications(seq) for seq in df['Sequence']])
+protein_cov_arr = calculate_protein_coverage(sequence, [strip_modifications(seq) for seq in df['PeptideSequence']])
 
 # given a array of 0 and 1 which represent amino acids that are either not covered or covered higjlight the protein sequence
 protein_coverage = ''
@@ -144,21 +148,28 @@ for i, aa in enumerate(sequence):
 protein_cov_perc = round(sum(protein_cov_arr) / len(protein_cov_arr) * 100, 2)
 
 # keep first fuplicate
-df.sort_values(by=['MissedCleavages'], inplace=True)
-df.drop_duplicates(subset=['Sequence', 'IsSemi'], inplace=True)
-df.sort_values(by=['StartIndex', 'PeptideLength'], inplace=True)
+df.sort_values(by=['MC'], inplace=True)
+df.drop_duplicates(subset=['PeptideSequence', 'IsSemi'], inplace=True)
+df.sort_values(by=['Start', 'AACount'], inplace=True)
+# reorder columns ( Start with Sequecne)
+df = df[['PeptideSequence', 'Start', 'End', 'AACount', 'MC', 'IsSemi', 'NeutralMass']]
 
 df_download = df.to_csv(index=False)
 
 # link is the column with hyperlinks
-df['Sequence'] = df['Sequence'].apply(make_clickable)
+df['PeptideSequence'] = df['PeptideSequence'].apply(make_clickable)
 
-st.header(f'Results')
+
+st.warning('This is a work in progress. Please report any issues or suggestions to pgarrett@scripps.edu.')
+with st.expander('Protease Regexes'):
+    st.write(VALID_PROTEASES)
+
+st.subheader(f'Results')
 
 c1, c2, c3 = st.columns(3)
 c1.metric('Cleavage Sites', len(sites))
 c2.metric('Total Peptides', len(df))
-c3.metric('Unique Peptides', len(df.drop_duplicates(subset=['Sequence'])))
+c3.metric('Unique Peptides', len(df.drop_duplicates(subset=['PeptideSequence'])))
 c1, c2, c3 = st.columns(3)
 c1.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
 c2.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
