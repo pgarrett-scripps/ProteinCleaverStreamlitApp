@@ -7,10 +7,10 @@ from peptacular.spans import get_enzymatic_spans, get_semi_spans
 from constants import LINK
 
 
-def make_clickable(sequence):
+def make_clickable(sequence, mass_type):
     # target _blank to open new window
     # extract clickable text to display for your link
-    link = LINK + f'?sequence={sequence}'
+    link = LINK + f'?sequence={sequence}&mass_type={mass_type}'
     return f'<a target="_blank" href="{link}">{sequence}</a>'
 
 

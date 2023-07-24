@@ -59,7 +59,7 @@ with st.sidebar:
     c1, c2 = st.columns(2)
     min_len = c1.number_input('Min peptide length', min_value=1, max_value=MAX_PEPTIDE_LEN, value=7, step=1,
                               help='Minimum peptide length (inclusive)')
-    max_len = c2.number_input('Max peptide length', min_value=1, max_value=MAX_PEPTIDE_LEN, value=25, step=1,
+    max_len = c2.number_input('Max peptide length', min_value=1, max_value=MAX_PEPTIDE_LEN, value=20, step=1,
                               help='Maximum peptide length (inclusive)')
 
     if min_len > max_len:
@@ -76,7 +76,13 @@ with st.sidebar:
         st.error('Min mass must be less than max mass')
         st.stop()
 
-    semi_enzymatic = st.checkbox('Semi Enzymatic?', help='Allow semi enzymatic peptides?')
+    c1, c2 = st.columns(2)
+    mass_type = c1.radio('Mass type', options=['monoisotopic', 'average'], index=0,
+                             help='Mass type to use for calculations')
+    is_mono = mass_type == 'monoisotopic'
+    semi_enzymatic = c2.checkbox('Semi Enzymatic?', help='Allow semi enzymatic peptides?')
+
+
 
     st.subheader('Static Modifications')
 
@@ -93,15 +99,15 @@ with st.sidebar:
                 st.multiselect('Amino acids to modify', key=f'residues{row}', options=list(AMINO_ACIDS),
                                help='Select residues to modify', default=['C'])
             with grid[1]:
-                st.number_input('Modification Mass', step=0.000001, key=f'mass{row}', help='Modification mass',
-                                value=57.021464, format='%.6f')
+                st.number_input('Modification Mass', step=0.00001, key=f'mass{row}', help='Modification mass',
+                                value=57.02146, format='%.5f')
         else:
             with grid[0]:
                 st.multiselect('Amino acids to modify', key=f'residues{row}', options=list(AMINO_ACIDS),
                                help='Select residues to modify')
             with grid[1]:
-                st.number_input('Modification Mass', step=0.000001, key=f'mass{row}', help='Modification mass',
-                                format='%.6f')
+                st.number_input('Modification Mass', step=0.00001, key=f'mass{row}', help='Modification mass',
+                                format='%.5f')
 
 
     # Loop to create rows of input widgets
@@ -111,7 +117,7 @@ with st.sidebar:
     mods = {}
     for r in range(num_rows):
         for residue in st.session_state[f'residues{r}']:
-            mods[residue] = "{:.6f}".format(st.session_state[f'mass{r}'])
+            mods[residue] = "{:.5f}".format(st.session_state[f'mass{r}'])
 
 sites = set()
 for enzyme_regex in enzyme_regexes:
@@ -132,8 +138,8 @@ df['IsSemi'] = df['IsSemi'].apply(lambda x: bool(x))
 df.drop_duplicates(inplace=True)
 df['PeptideSequence'] = df['PeptideSequence'].apply(lambda x: add_static_mods(x, mods))
 
-df['NeutralMass'] = [calculate_mass(sequence) for sequence in df['PeptideSequence']]
-df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
+df['Mass'] = [round(calculate_mass(sequence, monoisotopic=is_mono), 5) for sequence in df['PeptideSequence']]
+df = df[(df['Mass'] >= min_mass) & (df['Mass'] <= max_mass)]
 
 protein_cov_arr = calculate_protein_coverage(sequence, [strip_modifications(seq) for seq in df['PeptideSequence']])
 
@@ -151,13 +157,12 @@ protein_cov_perc = round(sum(protein_cov_arr) / len(protein_cov_arr) * 100, 2)
 df.sort_values(by=['MC'], inplace=True)
 df.drop_duplicates(subset=['PeptideSequence', 'IsSemi'], inplace=True)
 df.sort_values(by=['Start', 'AACount'], inplace=True)
-# reorder columns ( Start with Sequecne)
-df = df[['PeptideSequence', 'Start', 'End', 'AACount', 'MC', 'IsSemi', 'NeutralMass']]
+df = df[['PeptideSequence', 'Start', 'End', 'AACount', 'MC', 'IsSemi', 'Mass']]
 
 df_download = df.to_csv(index=False)
 
 # link is the column with hyperlinks
-df['PeptideSequence'] = df['PeptideSequence'].apply(make_clickable)
+df['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df['PeptideSequence']]
 
 
 st.warning('This is a work in progress. Please report any issues or suggestions to pgarrett@scripps.edu.')
