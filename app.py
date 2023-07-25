@@ -6,7 +6,7 @@ from peptacular.mass import calculate_mass
 from peptacular.constants import AMINO_ACIDS
 
 from constants import MAX_PROTEIN_LEN, VALID_PROTEASES, EXAMPLE_PROTEIN, MAX_PEPTIDE_MASS, MAX_PEPTIDE_LEN, \
-    MAX_MISSED_CLEAVAGES
+    MAX_MISSED_CLEAVAGES, PROTEASE_WIKI, HELP
 from util import make_clickable, generate_peptide_df
 
 # TODO: add color gradient to protein coverage to show the most covered regions
@@ -164,33 +164,43 @@ df['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df['P
 
 
 st.warning('This is a work in progress. Please report any issues or suggestions to pgarrett@scripps.edu.')
-with st.expander('Protease Regexes'):
+
+t1, t2, t3, t4 = st.tabs(['Results', 'Protease Regexes', 'Wiki', 'Help'])
+
+
+with t1:
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric('Cleavage Sites', len(sites))
+    c2.metric('Total Peptides', len(df))
+    c3.metric('Unique Peptides', len(df.drop_duplicates(subset=['PeptideSequence'])))
+    c1, c2, c3 = st.columns(3)
+    c1.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
+    c2.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
+    c3.metric('Protein Coverage', f'{protein_cov_perc}%')
+
+    with st.expander('Protein Coverage'):
+        st.markdown(protein_coverage, unsafe_allow_html=True)
+        st.caption('Red amino acids are covered by peptides, black are not')
+
+    with st.expander('Cleavage Sites'):
+        st.markdown(sites)
+        st.markdown(sequence_with_sites, unsafe_allow_html=True)
+        st.caption('Cleavage sites are marked with a red %')
+
+    st.subheader('Peptides')
+    df = df.to_html(escape=False)
+
+    st.caption('Click on a sequence to see the fragment ions!')
+    st.write(df, unsafe_allow_html=True, use_container_width=True)
+    st.write(' ')
+    st.download_button('Download CSV', df_download, 'digestion.csv', 'text/csv', use_container_width=True)
+
+with t2:
     st.write(VALID_PROTEASES)
 
-st.subheader(f'Results')
+with t3:
+    st.markdown(PROTEASE_WIKI)
 
-c1, c2, c3 = st.columns(3)
-c1.metric('Cleavage Sites', len(sites))
-c2.metric('Total Peptides', len(df))
-c3.metric('Unique Peptides', len(df.drop_duplicates(subset=['PeptideSequence'])))
-c1, c2, c3 = st.columns(3)
-c1.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
-c2.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
-c3.metric('Protein Coverage', f'{protein_cov_perc}%')
-
-with st.expander('Protein Coverage'):
-    st.markdown(protein_coverage, unsafe_allow_html=True)
-    st.caption('Red amino acids are covered by peptides, black are not')
-
-with st.expander('Cleavage Sites'):
-    st.markdown(sites)
-    st.markdown(sequence_with_sites, unsafe_allow_html=True)
-    st.caption('Cleavage sites are marked with a red %')
-
-st.subheader('Peptides')
-df = df.to_html(escape=False)
-
-st.caption('Click on a sequence to see the fragment ions!')
-st.write(df, unsafe_allow_html=True, use_container_width=True)
-st.write(' ')
-st.download_button('Download CSV', df_download, 'digestion.csv', 'text/csv', use_container_width=True)
+with t4:
+    st.markdown(HELP)
