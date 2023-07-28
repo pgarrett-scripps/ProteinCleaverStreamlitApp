@@ -220,9 +220,10 @@ df_download = df.to_csv(index=False)
 # link is the column with hyperlinks
 df['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df['PeptideSequence']]
 
-t1, t2, t3, t4 = st.tabs(['Results', 'Protease Regexes', 'Wiki', 'Help'])
+t1, t2, t3, t4, t5 = st.tabs(['Peptides', 'Cleavage', 'Coverage', 'Wiki', 'Help'])
 
 with t1:
+    st.subheader('Digestion Stats')
     c1, c2, c3 = st.columns(3)
     c1.metric('Cleavage Sites', len(sites))
     c2.metric('Total Peptides', len(df))
@@ -231,39 +232,6 @@ with t1:
     c1.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
     c2.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
     c3.metric('Protein Coverage', f'{protein_cov_perc}%')
-
-    with st.expander('Protein Coverage'):
-        st.markdown(protein_coverage, unsafe_allow_html=True)
-        st.caption('Red amino acids are covered by peptides, black are not')
-
-        # plot protein coverage at different MC (pyplot)
-        fig, ax = plt.subplots()
-        ax.plot(mcs, protein_cov_at_mcs)
-        ax.set_xlabel('Missed Cleavages')
-        ax.set_ylabel('Protein Coverage (%)')
-        ax.set_title('Protein Coverage at different Missed Cleavages')
-        st.pyplot(fig)
-
-        # plot protein coverage at different peptide lengths (pyplot)
-        fig, ax = plt.subplots()
-        ax.plot(lens, protein_cov_at_lens)
-        ax.set_xlabel('Peptide Length')
-        ax.set_ylabel('Protein Coverage (%)')
-        ax.set_title('Protein Coverage at different Peptide Lengths')
-        st.pyplot(fig)
-
-        # plot protein coverage at different peptide Mass (pyplot)
-        fig, ax = plt.subplots()
-        ax.plot(masses, protein_cov_at_mass)
-        ax.set_xlabel('Peptide Mass')
-        ax.set_ylabel('Protein Coverage (%)')
-        ax.set_title('Protein Coverage at different Peptide Masses')
-        st.pyplot(fig)
-
-    with st.expander('Cleavage Sites'):
-        st.markdown(sites)
-        st.markdown(sequence_with_sites, unsafe_allow_html=True)
-        st.caption('Cleavage sites are marked with a red %')
 
     st.subheader('Peptides')
     df = df.to_html(escape=False)
@@ -274,10 +242,48 @@ with t1:
     st.download_button('Download CSV', df_download, 'digestion.csv', 'text/csv', use_container_width=True)
 
 with t2:
-    st.write(VALID_PROTEASES)
+    st.subheader('Cleavage Sites')
+    st.markdown(sites)
+    st.markdown(sequence_with_sites, unsafe_allow_html=True)
+    st.caption('Cleavage sites are marked with a red %')
 
 with t3:
-    st.markdown(PROTEASE_WIKI)
+
+    st.subheader('Protein Coverage')
+    st.markdown(protein_coverage, unsafe_allow_html=True)
+    st.caption('Red amino acids are covered by peptides')
+
+
+    st.subheader('Protein Coverage Plots')
+    # plot protein coverage at different MC (pyplot)
+    fig, ax = plt.subplots()
+    ax.plot(mcs, protein_cov_at_mcs)
+    ax.set_xlabel('Missed Cleavages')
+    ax.set_ylabel('Protein Coverage (%)')
+    ax.set_title('Protein Coverage at different Missed Cleavages')
+    st.pyplot(fig)
+
+    # plot protein coverage at different peptide lengths (pyplot)
+    fig, ax = plt.subplots()
+    ax.plot(lens, protein_cov_at_lens)
+    ax.set_xlabel('Peptide Length')
+    ax.set_ylabel('Protein Coverage (%)')
+    ax.set_title('Protein Coverage at different Peptide Lengths')
+    st.pyplot(fig)
+
+    # plot protein coverage at different peptide Mass (pyplot)
+    fig, ax = plt.subplots()
+    ax.plot(masses, protein_cov_at_mass)
+    ax.set_xlabel('Peptide Mass')
+    ax.set_ylabel('Protein Coverage (%)')
+    ax.set_title('Protein Coverage at different Peptide Masses')
+    st.pyplot(fig)
 
 with t4:
+    st.markdown(PROTEASE_WIKI)
+
+with t5:
     st.markdown(HELP)
+
+    st.subheader('Proteases:')
+    st.write(VALID_PROTEASES)
