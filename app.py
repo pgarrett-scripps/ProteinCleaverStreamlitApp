@@ -220,7 +220,7 @@ df_download = df.to_csv(index=False)
 # link is the column with hyperlinks
 df['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df['PeptideSequence']]
 
-t1, t2, t3, t4, t5 = st.tabs(['Peptides', 'Cleavage', 'Coverage', 'Wiki', 'Help'])
+t1, t2, t3, t4, t5 = st.tabs(['Digest', 'Cleavage', 'Coverage', 'Wiki', 'Help'])
 
 with t1:
     st.subheader('Digestion Stats')
