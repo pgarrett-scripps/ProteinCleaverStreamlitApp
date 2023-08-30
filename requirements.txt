@@ -1,4 +1,4 @@
 pandas==2.0.3
 streamlit==1.24.1
-peptacular==0.3.0
+peptacular==1.0.1
 matplotlib==3.7.2

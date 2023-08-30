@@ -1,9 +1,10 @@
 import streamlit as st
 from matplotlib import pyplot as plt
-from peptacular.protein import calculate_protein_coverage
-from peptacular.sequence import identify_cleavage_sites, add_static_mods, strip_modifications
-from peptacular.mass import calculate_mass
+from peptacular.sequence import strip_modifications, calculate_sequence_length
+from peptacular.digest import identify_cleavage_sites
+from peptacular.mass import valid_mass_sequence
 from peptacular.constants import AMINO_ACIDS
+from peptacular.spans import calculate_span_coverage
 
 from constants import *
 from util import make_clickable, generate_peptide_df
@@ -30,25 +31,31 @@ with st.sidebar:
     st.markdown("""
     You can input your protein sequence in the well-known **FASTA format**. Don't worry if the sequence spans multiple 
     lines - Protein Cleaver will handle it seamlessly. Get started and unveil the peptides!
+    
+    You can globally specify **static modifications** to be applied to all amino acids, or directly include them in the
+    sequence. Modifications are specified by parenthesis, while terminal modifications use square brackets.
+    
+    Example: `[-13]MAS(1.2345)FRLFLLCLAGLVFVS[57.0]`
     """)
 
     raw_protein_sequence = st.text_area(label="Protein sequence",
                                         value=DEFAULT_PROTEIN_SEQUENCE,
                                         help='An amino acid sequence to digest',
-                                        max_chars=MAX_PROTEIN_LEN)
+                                        max_chars=MAX_PROTEIN_INPUT_LENGTH)
 
     protein_sequence = raw_protein_sequence.replace(' ', '').replace('\n', '')
-    st.caption(f'Length: {len(protein_sequence)}')
+    stripped_protein_sequence = strip_modifications(protein_sequence)
+    protein_length = calculate_sequence_length(protein_sequence)
+    st.caption(f'Length: {protein_length}')
 
-    if len(protein_sequence) > MAX_PROTEIN_LEN:
-        st.error(f'Protein sequence is too long. Please keep it under {MAX_PROTEIN_LEN} characters.')
+    if protein_length > MAX_PROTEIN_LEN:
+        st.error(f'Protein sequence is too long. Please keep it under {MAX_PROTEIN_LEN} residues.')
         st.stop()
 
     # check if all residues are valid
-    for aa in protein_sequence:
-        if aa not in AMINO_ACIDS:
-            st.error(f'Invalid amino acid: {aa}')
-            st.stop()
+    if not valid_mass_sequence(protein_sequence):
+        st.error('Invalid amino acid sequence. Please check your input.')
+        st.stop()
 
     c1, c2 = st.columns(2)
     proteases_selected = c1.multiselect(label="Select Proteases",
@@ -152,29 +159,23 @@ for enzyme_regex in enzyme_regexes:
     sites.update(identify_cleavage_sites(protein_sequence, enzyme_regex))
 sites = sorted(list(sites))
 
-df = generate_peptide_df(protein_sequence, sites, missed_cleavages, min_peptide_len, max_peptide_len, semi_enzymatic)
+df = generate_peptide_df(protein_sequence, sites, missed_cleavages, min_peptide_len, max_peptide_len,
+                         semi_enzymatic, mods, min_mass, max_mass, is_mono)
 
-sequence_with_sites = protein_sequence
+sequence_with_sites = stripped_protein_sequence
 for site in sites[::-1]:
     sequence_with_sites = sequence_with_sites[:site] + '%' + sequence_with_sites[site:]
 
 # color all | in red
 sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">%</span>')
 
-# make bool
-df['IsSemi'] = df['IsSemi'].apply(lambda x: bool(x))
-df.drop_duplicates(inplace=True)
-df['PeptideSequence'] = df['PeptideSequence'].apply(lambda x: add_static_mods(x, mods))
 
-df['Mass'] = [round(calculate_mass(sequence, monoisotopic=is_mono), 5) for sequence in df['PeptideSequence']]
-df = df[(df['Mass'] >= min_mass) & (df['Mass'] <= max_mass)]
-df['StrippedPeptide'] = df['PeptideSequence'].apply(strip_modifications)
+spans = [(s, e, mc) for s, e, mc in df[['Start', 'End', 'MC']].values]
+protein_cov_arr = calculate_span_coverage(spans, protein_length)
 
-protein_cov_arr = calculate_protein_coverage(protein_sequence, df['StrippedPeptide'])
-
-# given a array of 0 and 1 which represent amino acids that are either not covered or covered higjlight the protein sequence
+# color all covered amino acids in red
 protein_coverage = ''
-for i, aa in enumerate(protein_sequence):
+for i, aa in enumerate(stripped_protein_sequence):
     if protein_cov_arr[i] == 1:
         protein_coverage += '<span style="color:red">' + aa + '</span>'
     else:
@@ -184,8 +185,10 @@ for i, aa in enumerate(protein_sequence):
 protein_cov_at_mcs = []
 mcs = [mc for mc in range(0, missed_cleavages + 1)]
 for mc in mcs:
+
     df_mc = df[df['MC'] <= mc]
-    cov = calculate_protein_coverage(protein_sequence, df_mc['StrippedPeptide'])
+    spans = [(s, e, mc) for s, e, mc in df_mc[['Start', 'End', 'MC']].values]
+    cov = calculate_span_coverage(spans, protein_length)
     protein_cov_at_mcs.append(sum(cov) / len(cov) * 100)
 
 # calculate protein coverage at different peptide lengths
@@ -193,7 +196,8 @@ protein_cov_at_lens = []
 lens = [l for l in range(min_peptide_len, max_peptide_len + 1)]
 for l in lens:
     df_len = df[df['AACount'] <= l]
-    cov = calculate_protein_coverage(protein_sequence, df_len['StrippedPeptide'])
+    spans = [(s, e, mc) for s, e, mc in df_len[['Start', 'End', 'MC']].values]
+    cov = calculate_span_coverage(spans, protein_length)
     protein_cov_at_lens.append(sum(cov) / len(cov) * 100)
 
 # calculate protein coverage at different peptide Mass
@@ -201,7 +205,8 @@ protein_cov_at_mass = []
 masses = [m for m in range(int(min_mass), int(max_mass) + 1, 100)]
 for m in masses:
     df_mass = df[df['Mass'] <= m]
-    cov = calculate_protein_coverage(protein_sequence, df_mass['StrippedPeptide'])
+    spans = [(s, e, mc) for s, e, mc in df_mass[['Start', 'End', 'MC']].values]
+    cov = calculate_span_coverage(spans, protein_length)
     protein_cov_at_mass.append(sum(cov) / len(cov) * 100)
 
 protein_cov_perc = round(sum(protein_cov_arr) / len(protein_cov_arr) * 100, 2)
@@ -252,7 +257,6 @@ with t3:
     st.subheader('Protein Coverage')
     st.markdown(protein_coverage, unsafe_allow_html=True)
     st.caption('Red amino acids are covered by peptides')
-
 
     st.subheader('Protein Coverage Plots')
     # plot protein coverage at different MC (pyplot)

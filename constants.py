@@ -3,6 +3,7 @@ import copy
 from peptacular.constants import PROTEASES
 
 MAX_PROTEIN_LEN = 2_500
+MAX_PROTEIN_INPUT_LENGTH = 10_000
 
 MIN_MISSED_CLEAVAGES = 0
 MAX_MISSED_CLEAVAGES = 5

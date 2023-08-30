@@ -1,8 +1,10 @@
 from typing import List
 
 import pandas as pd
-from peptacular.sequence import identify_cleavage_sites
-from peptacular.spans import get_enzymatic_spans, get_semi_spans
+from peptacular.mass import calculate_mass
+from peptacular.sequence import span_to_sequence, calculate_sequence_length, apply_static_modifications, \
+    strip_modifications
+from peptacular.spans import build_enzymatic_spans, build_semi_spans
 
 from constants import LINK
 
@@ -15,22 +17,33 @@ def make_clickable(sequence, mass_type):
 
 
 def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: int, min_len: int,
-                        max_len: int, semi_enzymatic: bool):
+                        max_len: int, semi_enzymatic: bool, static_mods: dict, min_mass: float, max_mass: float, is_mono: bool):
     cleavage_sites = sorted(cleavage_sites)
-    spans = get_enzymatic_spans(len(sequence), cleavage_sites, missed_cleavages, None, None)
+    spans = build_enzymatic_spans(calculate_sequence_length(sequence), cleavage_sites, missed_cleavages, 1, None)
     df = pd.DataFrame(spans, columns=['Start', 'End', 'MC'])
-    df['PeptideSequence'] = df.apply(lambda x: sequence[x['Start']:x['End']], axis=1)
+    df['PeptideSequence'] = [span_to_sequence(sequence, span) for span in spans]
     df['IsSemi'] = 0
-    df = df[(df['PeptideSequence'].str.len() >= min_len) & (df['PeptideSequence'].str.len() <= max_len)]
 
     if semi_enzymatic is True:
-        semi_spans = get_semi_spans(spans, min_len, max_len)
+        semi_spans = build_semi_spans(spans, min_len, max_len)
         semi_df = pd.DataFrame(semi_spans, columns=['Start', 'End', 'MC'])
-        semi_df['PeptideSequence'] = semi_df.apply(lambda x: sequence[x['Start']:x['End']], axis=1)
+        semi_df['PeptideSequence'] = [span_to_sequence(sequence, span) for span in semi_spans]
         semi_df['IsSemi'] = 1
         df = pd.concat([df, semi_df], ignore_index=True)
 
+    df['AACount'] = df['End'] - df['Start']
+
     df = df.sort_values(by=['Start', 'End'])
-    df['AACount'] = df['PeptideSequence'].str.len()
+    # make bool
+    df['IsSemi'] = df['IsSemi'].apply(lambda x: bool(x))
+    df.drop_duplicates(inplace=True)
+
+    df = df[(df['AACount'] >= min_len) & (df['AACount'] <= max_len)]
+
+    df['PeptideSequence'] = df['PeptideSequence'].apply(lambda x: apply_static_modifications(x, static_mods))
+
+    df['Mass'] = [round(calculate_mass(sequence, monoisotopic=is_mono), 5) for sequence in df['PeptideSequence']]
+    df = df[(df['Mass'] >= min_mass) & (df['Mass'] <= max_mass)]
+    df['StrippedPeptide'] = df['PeptideSequence'].apply(strip_modifications)
 
     return df
