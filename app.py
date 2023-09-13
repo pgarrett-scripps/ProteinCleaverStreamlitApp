@@ -1,3 +1,5 @@
+from collections import Counter
+
 import streamlit as st
 from matplotlib import pyplot as plt
 from peptacular.sequence import strip_modifications, calculate_sequence_length
@@ -57,12 +59,17 @@ with st.sidebar:
         st.error('Invalid amino acid sequence. Please check your input.')
         st.stop()
 
+
     c1, c2 = st.columns(2)
-    proteases_selected = c1.multiselect(label="Select Proteases",
+    proteases_selected = c1.multiselect(label="Proteases",
                                         options=list(VALID_PROTEASES.keys()),
                                         help='The proteases to use for digestion',
                                         default=DEFAULT_PROTEASES)
-    missed_cleavages = c2.number_input(label='Max number of missed cleavages',
+    custom_regex = c2.text_input(label='(Additional) Custom protease',
+                                 value='',
+                                 help='A custom regular expression to use for digestion. Will be used along with selected proteases')
+
+    missed_cleavages = st.number_input(label='Max number of missed cleavages',
                                        min_value=MIN_MISSED_CLEAVAGES,
                                        max_value=MAX_MISSED_CLEAVAGES,
                                        value=DEFAULT_MISSED_CLEAVAGES,
@@ -70,6 +77,9 @@ with st.sidebar:
                                        help='Number of missed cleavages to allow during digestion')
 
     enzyme_regexes = [VALID_PROTEASES[protease] for protease in proteases_selected]
+
+    if custom_regex:
+        enzyme_regexes.append(custom_regex)
 
     c1, c2 = st.columns(2)
     min_peptide_len = c1.number_input(label='Min peptide length',
@@ -154,6 +164,7 @@ with st.sidebar:
         for residue in st.session_state[f'residues{r}']:
             mods[residue] = "{:.5f}".format(st.session_state[f'mass{r}'])
 
+
 sites = set()
 for enzyme_regex in enzyme_regexes:
     sites.update(identify_cleavage_sites(protein_sequence, enzyme_regex))
@@ -214,7 +225,7 @@ protein_cov_perc = round(sum(protein_cov_arr) / len(protein_cov_arr) * 100, 2)
 # remove StrippedPeptide
 df.drop(columns=['StrippedPeptide'], inplace=True)
 
-# keep first fuplicate
+# keep first duplicate
 df.sort_values(by=['MC'], inplace=True)
 df.drop_duplicates(subset=['PeptideSequence', 'IsSemi'], inplace=True)
 df.sort_values(by=['Start', 'AACount'], inplace=True)
@@ -222,27 +233,28 @@ df = df[['PeptideSequence', 'Start', 'End', 'AACount', 'MC', 'IsSemi', 'Mass']]
 
 df_download = df.to_csv(index=False)
 
+df_clickable = df.copy(deep=True)
 # link is the column with hyperlinks
-df['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df['PeptideSequence']]
+df_clickable['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df_clickable['PeptideSequence']]
 
-t1, t2, t3, t4, t5 = st.tabs(['Digest', 'Cleavage', 'Coverage', 'Wiki', 'Help'])
+t1, t2, t3, t4, t5, t6 = st.tabs(['Digest', 'Cleavage', 'Coverage', 'Pattern Match', 'Wiki', 'Help'])
 
 with t1:
     st.subheader('Digestion Stats')
     c1, c2, c3 = st.columns(3)
     c1.metric('Cleavage Sites', len(sites))
-    c2.metric('Total Peptides', len(df))
-    c3.metric('Unique Peptides', len(df.drop_duplicates(subset=['PeptideSequence'])))
+    c2.metric('Total Peptides', len(df_clickable))
+    c3.metric('Unique Peptides', len(df_clickable.drop_duplicates(subset=['PeptideSequence'])))
     c1, c2, c3 = st.columns(3)
-    c1.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
-    c2.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
+    c1.metric('Semi Peptides', len(df_clickable[df_clickable['IsSemi'] == True]))
+    c2.metric('Enzymatic Peptides', len(df_clickable[df_clickable['IsSemi'] == False]))
     c3.metric('Protein Coverage', f'{protein_cov_perc}%')
 
     st.subheader('Peptides')
-    df = df.to_html(escape=False)
+    df_html = df_clickable.to_html(escape=False)
 
     st.caption('Click on a sequence to see the fragment ions!')
-    st.write(df, unsafe_allow_html=True, use_container_width=True)
+    st.write(df_html, unsafe_allow_html=True, use_container_width=True)
     st.write(' ')
     st.download_button('Download CSV', df_download, 'digestion.csv', 'text/csv', use_container_width=True)
 
@@ -284,9 +296,33 @@ with t3:
     st.pyplot(fig)
 
 with t4:
+
+    st.subheader('Pattern Matching')
+    st.write('Will match the pattern to digested peptides and count the number of matches per peptide')
+
+    site_regex = st.text_input('Pattern Regex', '')
+
+    if site_regex:
+        sites = identify_cleavage_sites(stripped_protein_sequence, site_regex)
+
+        site_counts = []
+        for row in df[['Start', 'End']].values:
+            site_counts.append(sum([1 for site in sites if row[0] <= site < row[1]]))
+        df['PatternMatch'] = site_counts
+
+        st.subheader('Peptides')
+        st.dataframe(df)
+
+        counter = Counter(site_counts)
+
+        st.subheader('Peptides with X Matches')
+        # sorted by key, return a list of tuples
+        for k, v in sorted(counter.items()):
+            st.metric(f'{k} matches', v)
+with t5:
     st.markdown(PROTEASE_WIKI)
 
-with t5:
+with t6:
     st.markdown(HELP)
 
     st.subheader('Proteases:')
