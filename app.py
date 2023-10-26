@@ -1,7 +1,7 @@
 from collections import Counter
 
+import requests
 import streamlit as st
-from matplotlib import pyplot as plt
 from peptacular.sequence import strip_modifications, calculate_sequence_length
 from peptacular.digest import identify_cleavage_sites
 from peptacular.mass import valid_mass_sequence
@@ -25,14 +25,27 @@ hide_table_row_index = """
 # Inject CSS with Markdown
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 
+
+@st.cache_data
+def fetch_sequence_from_uniprot(accession_number):
+    url = f"https://www.uniprot.org/uniprot/{accession_number}.fasta"
+    response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Error fetching sequence from UniProt: {response.status_code}")
+        st.stop()
+        return None
+    return ''.join(response.text.split('\n')[1:])  # Remove the header line
+
+
 with st.sidebar:
     st.title('Protein Cleaver 🔪')
     st.markdown("""
     **Protein Cleaver** is an app to compute protease-specific cleavage sites and peptides.
     """)
     st.markdown("""
-    You can input your protein sequence in the well-known **FASTA format**. Don't worry if the sequence spans multiple 
-    lines - Protein Cleaver will handle it seamlessly. Get started and unveil the peptides!
+    You can input your protein sequence in **FASTA format** (Don't worry if the sequence spans multiple lines), 
+    or input the proteins accession number (e.g. P04406) / protein identifier (e.g. ALBU_HUMAN). 
+    Get started and unveil the peptides!
     
     You can globally specify **static modifications** to be applied to all amino acids, or directly include them in the
     sequence. Modifications are specified by parenthesis, while terminal modifications use square brackets.
@@ -40,10 +53,21 @@ with st.sidebar:
     Example: `[-13]MAS(1.2345)FRLFLLCLAGLVFVS[57.0]`
     """)
 
+    protein_id = st.text_input(label='Protein accession number / identifier',
+                               value='',
+                               help='A protein accession number / identifier')
+
+    raw_protein_sequence = None
+    if protein_id:
+        fetched_protein_sequence = fetch_sequence_from_uniprot(protein_id)
+        if fetched_protein_sequence is not None:
+            raw_protein_sequence = fetched_protein_sequence
+
     raw_protein_sequence = st.text_area(label="Protein sequence",
-                                        value=DEFAULT_PROTEIN_SEQUENCE,
+                                        value=raw_protein_sequence if raw_protein_sequence else DEFAULT_PROTEIN_SEQUENCE,
                                         help='An amino acid sequence to digest',
-                                        max_chars=MAX_PROTEIN_INPUT_LENGTH)
+                                        max_chars=MAX_PROTEIN_INPUT_LENGTH,
+                                        height=200)
 
     protein_sequence = raw_protein_sequence.replace(' ', '').replace('\n', '')
     stripped_protein_sequence = strip_modifications(protein_sequence)
@@ -58,7 +82,6 @@ with st.sidebar:
     if not valid_mass_sequence(protein_sequence):
         st.error('Invalid amino acid sequence. Please check your input.')
         st.stop()
-
 
     c1, c2 = st.columns(2)
     proteases_selected = c1.multiselect(label="Proteases",
@@ -140,6 +163,7 @@ with st.sidebar:
     # columns to lay out the inputs
     grid = st.columns([3, 2])
 
+
     def add_row(row):
         with grid[0]:
             st.multiselect(label='Amino acids',
@@ -164,7 +188,6 @@ with st.sidebar:
         for residue in st.session_state[f'residues{r}']:
             mods[residue] = "{:.5f}".format(st.session_state[f'mass{r}'])
 
-
 sites = set()
 for enzyme_regex in enzyme_regexes:
     sites.update(identify_cleavage_sites(protein_sequence, enzyme_regex))
@@ -179,7 +202,6 @@ for site in sites[::-1]:
 
 # color all | in red
 sequence_with_sites = sequence_with_sites.replace('%', '<span style="color:red">%</span>')
-
 
 spans = [(s, e, mc) for s, e, mc in df[['Start', 'End', 'MC']].values]
 protein_cov_arr = calculate_span_coverage(spans, protein_length)
@@ -196,7 +218,6 @@ for i, aa in enumerate(stripped_protein_sequence):
 protein_cov_at_mcs = []
 mcs = [mc for mc in range(0, missed_cleavages + 1)]
 for mc in mcs:
-
     df_mc = df[df['MC'] <= mc]
     spans = [(s, e, mc) for s, e, mc in df_mc[['Start', 'End', 'MC']].values]
     cov = calculate_span_coverage(spans, protein_length)
@@ -265,42 +286,29 @@ with t2:
     st.caption('Cleavage sites are marked with a red %')
 
 with t3:
-
     st.subheader('Protein Coverage')
     st.markdown(protein_coverage, unsafe_allow_html=True)
     st.caption('Red amino acids are covered by peptides')
 
     st.subheader('Protein Coverage Plots')
-    # plot protein coverage at different MC (pyplot)
-    fig, ax = plt.subplots()
-    ax.plot(mcs, protein_cov_at_mcs)
-    ax.set_xlabel('Missed Cleavages')
-    ax.set_ylabel('Protein Coverage (%)')
-    ax.set_title('Protein Coverage at different Missed Cleavages')
-    st.pyplot(fig)
 
-    # plot protein coverage at different peptide lengths (pyplot)
-    fig, ax = plt.subplots()
-    ax.plot(lens, protein_cov_at_lens)
-    ax.set_xlabel('Peptide Length')
-    ax.set_ylabel('Protein Coverage (%)')
-    ax.set_title('Protein Coverage at different Peptide Lengths')
-    st.pyplot(fig)
+    st.caption('Protein Coverage at different Missed Cleavages')
+    st.line_chart(data={'Missed Cleavages': mcs, 'Protein Coverage (%)': protein_cov_at_mcs},
+                  x='Missed Cleavages', y='Protein Coverage (%)')
 
-    # plot protein coverage at different peptide Mass (pyplot)
-    fig, ax = plt.subplots()
-    ax.plot(masses, protein_cov_at_mass)
-    ax.set_xlabel('Peptide Mass')
-    ax.set_ylabel('Protein Coverage (%)')
-    ax.set_title('Protein Coverage at different Peptide Masses')
-    st.pyplot(fig)
+    st.caption('Protein Coverage at different Peptide Lengths')
+    st.line_chart(data={'Peptide Length': lens, 'Protein Coverage (%)': protein_cov_at_lens},
+                  x='Peptide Length', y='Protein Coverage (%)')
+
+    st.caption('Protein Coverage at different Peptide Masses')
+    st.line_chart(data={'Peptide Mass': masses, 'Protein Coverage (%)': protein_cov_at_mass},
+                  x='Peptide Mass', y='Protein Coverage (%)')
 
 with t4:
-
     st.subheader('Pattern Matching')
     st.write('Will match the pattern to digested peptides and count the number of matches per peptide')
 
-    site_regex = st.text_input('Pattern Regex', '')
+    site_regex = st.text_input('Pattern Regex', '(K)')
 
     if site_regex:
         sites = identify_cleavage_sites(stripped_protein_sequence, site_regex)
@@ -315,7 +323,7 @@ with t4:
 
         counter = Counter(site_counts)
 
-        st.subheader('Peptides with X Matches')
+        st.subheader('Peptides with N Number of Pattern Matches')
         # sorted by key, return a list of tuples
         for k, v in sorted(counter.items()):
             st.metric(f'{k} matches', v)
