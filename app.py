@@ -243,25 +243,21 @@ for m in masses:
 
 protein_cov_perc = round(sum(protein_cov_arr) / len(protein_cov_arr) * 100, 2)
 
-# remove StrippedPeptide
-df.drop(columns=['StrippedPeptide'], inplace=True)
 
-# keep first duplicate
+df.drop(columns=['StrippedPeptide'], inplace=True)
 df.sort_values(by=['MC'], inplace=True)
 df.drop_duplicates(subset=['PeptideSequence', 'IsSemi'], inplace=True)
 df.sort_values(by=['Start', 'AACount'], inplace=True)
 df = df[['PeptideSequence', 'Start', 'End', 'AACount', 'MC', 'IsSemi', 'Mass']]
-
 df_download = df.to_csv(index=False)
-
 df_clickable = df.copy(deep=True)
-# link is the column with hyperlinks
 df_clickable['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in df_clickable['PeptideSequence']]
 
-t1, t2, t3, t4, t5, t6 = st.tabs(['Digest', 'Cleavage', 'Coverage', 'Pattern Match', 'Wiki', 'Help'])
+
+t1, t2, t3, t4, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help'])
 
 with t1:
-    st.subheader('Digestion Stats')
+    st.subheader('Digestion Overview')
     c1, c2, c3 = st.columns(3)
     c1.metric('Cleavage Sites', len(sites))
     c2.metric('Total Peptides', len(df_clickable))
@@ -271,7 +267,7 @@ with t1:
     c2.metric('Enzymatic Peptides', len(df_clickable[df_clickable['IsSemi'] == False]))
     c3.metric('Protein Coverage', f'{protein_cov_perc}%')
 
-    st.subheader('Peptides')
+    st.subheader('Peptide Results')
     df_html = df_clickable.to_html(escape=False)
 
     st.caption('Click on a sequence to see the fragment ions!')
@@ -279,36 +275,33 @@ with t1:
     st.write(' ')
     st.download_button('Download CSV', df_download, 'digestion.csv', 'text/csv', use_container_width=True)
 
+
 with t2:
-    st.subheader('Cleavage Sites')
+    st.subheader('Cleavage Sites', help='Red % are cleavage sites')
     st.markdown(sites)
     st.markdown(sequence_with_sites, unsafe_allow_html=True)
-    st.caption('Cleavage sites are marked with a red %')
 
-with t3:
-    st.subheader('Protein Coverage')
+    st.subheader('Protein Coverage', help='Red amino acids are covered by peptides')
     st.markdown(protein_coverage, unsafe_allow_html=True)
-    st.caption('Red amino acids are covered by peptides')
 
-    st.subheader('Protein Coverage Plots')
-
-    st.caption('Protein Coverage at different Missed Cleavages')
+    st.subheader('Coverage Dynamics: Missed Cleavages')
     st.line_chart(data={'Missed Cleavages': mcs, 'Protein Coverage (%)': protein_cov_at_mcs},
                   x='Missed Cleavages', y='Protein Coverage (%)')
 
-    st.caption('Protein Coverage at different Peptide Lengths')
+    st.caption('Coverage Dynamics: Peptide Lengths')
     st.line_chart(data={'Peptide Length': lens, 'Protein Coverage (%)': protein_cov_at_lens},
                   x='Peptide Length', y='Protein Coverage (%)')
 
-    st.caption('Protein Coverage at different Peptide Masses')
+    st.caption('"Coverage Dynamics: Peptide Masses')
     st.line_chart(data={'Peptide Mass': masses, 'Protein Coverage (%)': protein_cov_at_mass},
                   x='Peptide Mass', y='Protein Coverage (%)')
 
-with t4:
-    st.subheader('Pattern Matching')
-    st.write('Will match the pattern to digested peptides and count the number of matches per peptide')
+with t3:
+    st.subheader('Peptide Pattern Identification')
+    st.write('This page identifies and tallies occurrences of your specified pattern within the digested peptides.'
+             ' It provides a count of how many times each pattern appears in every peptide.')
 
-    site_regex = st.text_input('Pattern Regex', '(K)')
+    site_regex = st.text_input('Enter Pattern Regex', '(K)')
 
     if site_regex:
         sites = identify_cleavage_sites(stripped_protein_sequence, site_regex)
@@ -323,14 +316,20 @@ with t4:
 
         counter = Counter(site_counts)
 
-        st.subheader('Peptides with N Number of Pattern Matches')
-        # sorted by key, return a list of tuples
+        st.subheader('Frequency Analysis', help='Number of peptides with N number of motif matches')
         for k, v in sorted(counter.items()):
-            st.metric(f'{k} matches', v)
-with t5:
+            st.metric(f'Peptides with {k} motif matches', v)
+
+        st.subheader('Coverage Analysis', help='Coverage of protein based on peptides with N number of motif matches')
+        for k, v in sorted(counter.items()):
+            df_tmp = df[df['PatternMatch'] == k]
+            tmp_spans = [(s, e, mc) for s, e, mc in df_tmp[['Start', 'End', 'MC']].values]
+            cov = calculate_span_coverage(tmp_spans, protein_length)
+            st.metric(f'Protein Coverage with {k} motif matches', f'{round(sum(cov) / len(cov) * 100, 2)}%')
+with t4:
     st.markdown(PROTEASE_WIKI)
 
-with t6:
+with t5:
     st.markdown(HELP)
 
     st.subheader('Proteases:')
