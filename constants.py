@@ -18,7 +18,7 @@ PEPTIDE_LEN_STEP = 1
 
 MIN_PEPTIDE_MASS = 0.0
 MAX_PEPTIDE_MASS = 10000.0
-DEFAULT_MIN_PEPTIDE_MASS = 50.0
+DEFAULT_MIN_PEPTIDE_MASS = 500.0
 DEFAULT_MAX_PEPTIDE_MASS = 8000.0
 PEPTIDE_MASS_STEP = 100.0
 
@@ -32,6 +32,18 @@ MIN_STATIC_MODS = 0
 MAX_STATIC_MODS = 10
 DEFAULT_STATIC_MODS = 1
 STATIC_MODS_STEP = 1
+
+MIN_CHARGE = 1
+MAX_CHARGE = 10
+DEFAULT_MIN_CHARGE = 2
+DEFAULT_MAX_CHARGE = 5
+CHARGE_STEP = 1
+
+MIN_MZ = 0.0
+MAX_MZ = 2_000.0
+DEFAULT_MIN_MZ = 200.0
+DEFAULT_MAX_MZ = 2_000.0
+MZ_STEP = 100.0
 
 DEFAULT_PROTEIN_SEQUENCE = "MASFRLFLLCLAGLVFVSEAGSVGAGEPKCPLMVKVLDAVRGSPAANVGVKVFKKAADETWEPFASGKTSESGELHGLTTEDKFVEGLY" \
                            "KVELDTKSYWKSLGISPFHEFAEVVFTANDSGPRHYTIAALLSPYSYSTTALVSSPKA"
@@ -180,8 +192,18 @@ The choice between using average mass and monoisotopic mass in a proteomics stud
 Typically, monoisotopic mass is preferred in proteomics as it provides a more exact mass measurement, which can improve the accuracy of peptide and protein identifications. However, in some cases, such as with larger proteins or lower resolution instruments, it may be more appropriate to use average mass.
 """
 
-
 HELP ="""
+
+**Protein Cleaver** is an app to compute protease-specific cleavage sites and peptides.
+
+You can input your protein sequence in **FASTA format** (Don't worry if the sequence spans multiple lines), 
+or input the proteins accession number (e.g. P04406) / protein identifier (e.g. ALBU_HUMAN). 
+Get started and unveil the peptides!
+
+You can globally specify **static modifications** to be applied to all amino acids, or directly include them in the
+sequence. Modifications are specified by parenthesis, while terminal modifications use square brackets.
+
+Example: `[-13]MAS(1.2345)FRLFLLCLAGLVFVS[57.0]`
 
 ## Column Labels
 
