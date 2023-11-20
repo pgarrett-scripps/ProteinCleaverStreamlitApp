@@ -1,21 +1,19 @@
 import pickle
 from collections import Counter
 
-import matplotlib
+import streamlit as st
 import numpy as np
 import requests
-import streamlit as st
 from peptacular.sequence import strip_modifications, calculate_sequence_length
 from peptacular.digest import identify_cleavage_sites
 from peptacular.mass import valid_mass_sequence
 from peptacular.constants import AMINO_ACIDS
 from peptacular.spans import calculate_span_coverage
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import matplotlib as mpl
 
 from constants import *
-from util import make_clickable, generate_peptide_df
+from wiki import *
+from util import make_clickable, generate_peptide_df, bin_aa_counts, coverage_string, create_colorbar
 
 # TODO: add color gradient to protein coverage to show the most covered regions
 
@@ -53,19 +51,19 @@ with st.sidebar:
                                value='',
                                help='A protein accession number / identifier')
 
-    raw_protein_sequence = None
+    raw_sequence = None
     if protein_id:
         fetched_protein_sequence = fetch_sequence_from_uniprot(protein_id)
         if fetched_protein_sequence is not None:
-            raw_protein_sequence = fetched_protein_sequence
+            raw_sequence = fetched_protein_sequence
 
-    raw_protein_sequence = st.text_area(label="Protein sequence",
-                                        value=raw_protein_sequence if raw_protein_sequence else DEFAULT_PROTEIN_SEQUENCE,
-                                        help='An amino acid sequence to digest',
-                                        max_chars=MAX_PROTEIN_INPUT_LENGTH,
-                                        height=200)
+    raw_sequence = st.text_area(label="Protein sequence",
+                                value=raw_sequence if raw_sequence else DEFAULT_PROTEIN_SEQUENCE,
+                                help='An amino acid sequence to digest',
+                                max_chars=MAX_PROTEIN_INPUT_LENGTH,
+                                height=200)
 
-    protein_sequence = raw_protein_sequence.replace(' ', '').replace('\n', '')
+    protein_sequence = raw_sequence.replace(' ', '').replace('\n', '')
     stripped_protein_sequence = strip_modifications(protein_sequence)
     protein_length = calculate_sequence_length(protein_sequence)
     st.caption(f'Length: {protein_length}')
@@ -87,10 +85,11 @@ with st.sidebar:
 
     custom_regex = c2.text_input(label='(Additional) Custom protease',
                                  value='',
-                                 help='A custom regular expression to use for digestion. Will be used along with selected proteases')
+                                 help='A custom regular expression to use for digestion. Will be used along with '
+                                      'selected proteases')
 
     c1, c2 = st.columns(2)
-    missed_cleavages = c1.number_input(label='Max number of missed cleavages',
+    missed_cleavages = c1.number_input(label='Max missed cleavages',
                                        min_value=MIN_MISSED_CLEAVAGES,
                                        max_value=MAX_MISSED_CLEAVAGES,
                                        value=DEFAULT_MISSED_CLEAVAGES,
@@ -113,6 +112,7 @@ with st.sidebar:
                                       value=DEFAULT_MIN_PEPTIDE_LEN,
                                       step=PEPTIDE_LEN_STEP,
                                       help='Minimum peptide length (inclusive)')
+
     max_peptide_len = c2.number_input(label='Max peptide length',
                                       min_value=MIN_PEPTIDE_LEN,
                                       max_value=MAX_PEPTIDE_LEN,
@@ -131,6 +131,7 @@ with st.sidebar:
                                value=DEFAULT_MIN_PEPTIDE_MASS,
                                step=PEPTIDE_MASS_STEP,
                                help='Minimum peptide mass (inclusive)')
+
     max_mass = c4.number_input(label='Max peptide mass',
                                min_value=MIN_PEPTIDE_MASS,
                                max_value=MAX_PEPTIDE_MASS,
@@ -157,6 +158,7 @@ with st.sidebar:
                                      value=DEFAULT_MIN_CHARGE,
                                      step=CHARGE_STEP,
                                      help='Minimum peptide charge (inclusive)')
+
         max_charge = c2.number_input(label='Max charge',
                                      min_value=MIN_CHARGE,
                                      max_value=MAX_CHARGE,
@@ -201,18 +203,18 @@ with st.sidebar:
     grid = st.columns([3, 2])
 
 
-    def add_row(row):
+    def add_row(r):
         with grid[0]:
             st.multiselect(label='Amino acids',
-                           key=f'residues{row}',
+                           key=f'residues{r}',
                            options=list(AMINO_ACIDS),
                            help='Select amino acids for which to apply the static modification',
-                           default=['C'] if row == 0 else [])
+                           default=['C'] if r == 0 else [])
         with grid[1]:
             st.number_input(label='Modification Mass (Da)',
-                            step=0.00001, key=f'mass{row}',
+                            step=0.00001, key=f'mass{r}',
                             help='The mass of the modification (in daltons)',
-                            value=57.02146 if row == 0 else 0.0,
+                            value=57.02146 if r == 0 else 0.0,
                             format='%.5f')
 
 
@@ -234,103 +236,50 @@ df = generate_peptide_df(protein_sequence, sites, missed_cleavages, min_peptide_
                          semi_enzymatic, mods, min_mass, max_mass, is_mono, infer_charge, min_charge,
                          max_charge, min_mz, max_mz)
 
-
-def bin_aa_counts(seq, charge=None):
-    amino_acids = 'ACDEFGHIKLMNPQRSTVWY'
-    aa_counts = Counter(seq)
-
-    enc = [aa_counts.get(aa, 0) for aa in amino_acids]
-    if charge is not None:
-        enc.append(charge)
-    return enc
-
-
 rt_model = pickle.load(open("rt_model.pkl", "rb"))
-df['RT'] = rt_model.predict(np.array([bin_aa_counts(strip_modifications(seq)) for seq in df['PeptideSequence']]))
+df['RT'] = rt_model.predict(np.array([bin_aa_counts(strip_modifications(seq)) for seq in df['Sequence']]))
+df['RT'] = df['RT'].round(3)
 
 im_model = pickle.load(open("im_model.pkl", "rb"))
 df['IM'] = im_model.predict(
-    np.array([bin_aa_counts(strip_modifications(seq), c) for seq, c in df[['PeptideSequence', 'Charge']].values]))
+    np.array([bin_aa_counts(strip_modifications(seq), c) for seq, c in df[['Sequence', 'Charge']].values]))
+df['IM'] = df['IM'].round(3)
 
 proteotypic_model = pickle.load(open("proteotypic_model.pkl", "rb"))
 df['Proteotypic'] = proteotypic_model.predict(
-    np.array([bin_aa_counts(strip_modifications(seq)) for seq in df['PeptideSequence']])).astype(bool)
+    np.array([bin_aa_counts(strip_modifications(seq)) for seq in df['Sequence']])).astype(bool)
 
 if remove_non_proteotypic:
-    df = df[df['Proteotypic'] == True]
+    df = df[df['Proteotypic']]
 
 # Start the HTML string for the site indexes
 site_indexes_html = '<span style="font-family: Courier New, monospace; font-size: 16px;">'
 for index in sites:
-    site_indexes_html += f'<span style="background-color:#ffff99; color:red; padding:2px; margin:1px; border:1px solid #ffcc00; border-radius:3px;">{index}</span>'
+    site_indexes_html += f'<span style="background-color:#f0f0f0; font-weight:900; color:red; padding:2px; ' \
+                         f'margin:1px; border:1px solid #ffcc00; border-radius:3px;">{index}</span>'
     site_indexes_html += ' '
 site_indexes_html += '</span>'
 
 sequence_with_sites = '<span style="font-family: Courier New, monospace; font-size: 16px;">'
 for i, aa in enumerate(stripped_protein_sequence):
     # Add the amino acid with its original index
-    sequence_with_sites += f'<span title="Index: {i + 1}" style="background-color:#f0f0f0; color:#333; padding:2px; margin:1px; border:1px solid #cccccc; border-radius:3px;">{aa}</span>'
+    sequence_with_sites += f'<span title="Index: {i + 1}" style="background-color:#f0f0f0; font-weight:900; ' \
+                           f'color:#333; padding:2px; margin:1px; border:1px solid #cccccc; ' \
+                           f'border-radius:3px;">{aa}</span>'
 
     # Check if the next position is a cleavage site and insert '%' character
     if i + 1 in sites:
         # Highlight '%' character in blue
-        sequence_with_sites += f'<span style="background-color:#e0e0ff; color:blue; font-weight:bold; padding:2px; margin:1px; border:1px solid #a0a0ff; border-radius:3px;">%</span>'
-
+        sequence_with_sites += f'<span style="background-color:#e0e0ff; font-weight:900; color:red; font-weight:bold;' \
+                               f' padding:2px; margin:1px; border:1px solid #a0a0ff; border-radius:3px;">%</span>'
 sequence_with_sites += '</span>'
 
-CMAP = 'hot'
-
-
-def coverage_string(protein_cov_arr, stripped_protein_sequence):
-    # Find the maximum coverage value
-    max_coverage = max(protein_cov_arr)
-
-    # Create a colormap
-    cmap = matplotlib.colormaps.get_cmap(CMAP)
-
-    # Color all covered amino acids based on coverage and show index on hover, using a monospace font
-    protein_coverage = '<span style="font-family: Courier New, monospace; font-size: 16px;">'
-    for i, aa in enumerate(stripped_protein_sequence):
-        coverage = protein_cov_arr[i]
-        if coverage > 0 and max_coverage > 0:
-            # Normalize the coverage based on the maximum value
-            normalized_coverage = 1 - coverage / max_coverage
-
-            # Get color from colormap
-            color = cmap(normalized_coverage)
-            hex_color = mcolors.to_hex(color)
-
-            protein_coverage += f'<span title="Index: {i + 1}; Coverage: {coverage}" style="background-color:#e0e0ff; color:{hex_color}; font-weight:900; padding:3px; margin:1px; border:1px solid #a0a0ff; border-radius:3px;">{aa}</span>'
-        else:
-            # Style the non-covered amino acid for a polished look with a tooltip
-            protein_coverage += f'<span title="Index: {i + 1}" style="background-color:#f0f0f0; color:#333; font-weight:900; padding:3px; margin:1px; border:1px solid #cccccc; border-radius:3px;">{aa}</span>'
-    protein_coverage += '</span>'
-
-    return protein_coverage
-
-
-def create_and_display_colorbar(max_coverage):
-    # Create a figure and a subplot for the colorbar
-    fig, ax = plt.subplots(figsize=(15, 1))
-    fig.subplots_adjust(bottom=0.5)
-
-    # Create a colormap
-    cmap = mpl.cm.get_cmap(CMAP)
-
-    # Create a normalization from 0 to max_coverage
-    norm = mpl.colors.Normalize(vmin=0, vmax=max_coverage)
-
-    # Create a colorbar in the subplot
-    cb = mpl.colorbar.ColorbarBase(ax, cmap=cmap, norm=norm, orientation='horizontal')
-    cb.set_label('Coverage')
-
-    # Display the colorbar in Streamlit
-    st.pyplot(fig)
-
+# Create a colormap
+cmap = mpl.colormaps.get_cmap(CMAP)
 
 spans = [(s, e, mc) for s, e, mc in df[['Start', 'End', 'MC']].values]
 protein_cov_arr = calculate_span_coverage(spans, protein_length, accumulate=True)
-protein_coverage = coverage_string(protein_cov_arr, stripped_protein_sequence)
+protein_coverage = coverage_string(protein_cov_arr, stripped_protein_sequence, cmap)
 
 # calculate protein coverage at different MC
 protein_cov_at_mcs = []
@@ -345,7 +294,7 @@ for mc in mcs:
 protein_cov_at_lens = []
 lens = [l for l in range(min_peptide_len, max_peptide_len + 1)]
 for l in lens:
-    df_len = df[df['AACount'] <= l]
+    df_len = df[df['Len'] <= l]
     spans = [(s, e, mc) for s, e, mc in df_len[['Start', 'End', 'MC']].values]
     cov = calculate_span_coverage(spans, protein_length)
     protein_cov_at_lens.append(sum(cov) / len(cov) * 100)
@@ -354,32 +303,33 @@ for l in lens:
 protein_cov_at_mass = []
 masses = [m for m in range(int(min_mass), int(max_mass) + 1, 100)]
 for m in masses:
-    df_mass = df[df['Mass'] <= m]
+    df_mass = df[df['NeutralMass'] <= m]
     spans = [(s, e, mc) for s, e, mc in df_mass[['Start', 'End', 'MC']].values]
     cov = calculate_span_coverage(spans, protein_length)
     protein_cov_at_mass.append(sum(cov) / len(cov) * 100)
 
 df.drop(columns=['StrippedPeptide'], inplace=True)
 df.sort_values(by=['MC'], inplace=True)
-df.drop_duplicates(subset=['Start', 'PeptideSequence', 'IsSemi'], inplace=True)
-df.sort_values(by=['Start', 'AACount'], inplace=True)
+df.drop_duplicates(subset=['Start', 'Sequence', 'Semi'], inplace=True)
+df.sort_values(by=['Start', 'Len'], inplace=True)
 
-t1, t2, t3, t4, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help'])
+t1, t2, t3, t4, t5, t6 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help',
+                                  'Machine Learning'])
 
 with t1:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric('Total Peptides', len(df))
-    c2.metric('Semi Peptides', len(df[df['IsSemi'] == True]))
-    c3.metric('Enzymatic Peptides', len(df[df['IsSemi'] == False]))
-    c4.metric('Unique Peptides', len(df['PeptideSequence'].unique()))
+    c2.metric('Semi Peptides', len(df[df['Semi']]))
+    c3.metric('Enzymatic Peptides', len(df[~df['Semi']]))
+    c4.metric('Unique Peptides', len(df['Sequence'].unique()))
 
     st.subheader('Peptides')
     clickable = st.checkbox('Peptide Fragmenter Links', value=True)
 
     if clickable:
         df_clickable = df.copy(deep=True)
-        df_clickable['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in
-                                           df_clickable['PeptideSequence']]
+        df_clickable['Sequence'] = [make_clickable(peptide, mass_type) for peptide in
+                                    df_clickable['Sequence']]
         st.caption('Click on a sequence to see the fragment ions!')
         st.write(df_clickable.to_html(escape=False), unsafe_allow_html=True, use_container_width=True)
     else:
@@ -403,7 +353,8 @@ with t2:
     st.markdown(protein_coverage, unsafe_allow_html=True)
 
     # Example usage in a Streamlit app
-    create_and_display_colorbar(max(protein_cov_arr))
+    f = create_colorbar(max(protein_cov_arr), cmap)
+    st.pyplot(f)
 
     st.subheader('Coverage vs Missed Cleavages')
     st.line_chart(data={'Missed Cleavages': mcs, 'Protein Coverage (%)': protein_cov_at_mcs},
@@ -432,12 +383,27 @@ with t3:
             site_counts.append(sum([1 for site in sites if row[0] <= site < row[1]]))
         df['PatternMatch'] = site_counts
 
+        cov_site_mat = [0] * len(stripped_protein_sequence)
+        for row in df[['Start', 'End', 'PatternMatch']].values:
+
+            if row[2] == 0:
+                continue
+
+            for i in range(row[0], row[1] + 1):
+                if i in sites:
+                    if row[2] == 1:
+                        cov_site_mat[i - 1] = 1
+                    else:
+                        if cov_site_mat[i - 1] == 0:
+                            cov_site_mat[i - 1] = row[2]
+                        else:
+                            cov_site_mat[i - 1] = min(row[2], cov_site_mat[i - 1])
+
         clickable2 = st.checkbox('Peptide Fragmenter Links', value=False, key=1)
         st.subheader('Peptides')
         if clickable2:
             df_clickable = df.copy(deep=True)
-            df_clickable['PeptideSequence'] = [make_clickable(peptide, mass_type) for peptide in
-                                               df_clickable['PeptideSequence']]
+            df_clickable['Sequence'] = [make_clickable(peptide, mass_type) for peptide in df_clickable['Sequence']]
             st.caption('Click on a sequence to see the fragment ions!')
             st.write(df_clickable.to_html(escape=False), unsafe_allow_html=True, use_container_width=True)
         else:
@@ -446,24 +412,32 @@ with t3:
         counter = Counter(site_counts)
 
         st.subheader('Coverage Analysis', help='Coverage of protein based on peptides with N number of motif matches')
-        for i, (k, v) in enumerate(sorted(counter.items())):
-            df_tmp = df[df['PatternMatch'] == k]
-            tmp_spans = [(s, e, mc) for s, e, mc in df_tmp[['Start', 'End', 'MC']].values]
-            cov = calculate_span_coverage(tmp_spans, protein_length, accumulate=True)
+        sites = [i - 1 for i in sites if i != 0]
+        protein_coverage = coverage_string(cov_site_mat, stripped_protein_sequence, cmap, sites)
+        st.markdown(protein_coverage, unsafe_allow_html=True)
+        f = create_colorbar(max(cov_site_mat), cmap, label='Min Number of Motif Matches')
+        st.pyplot(f)
+        with st.expander('Show Coverage Table'):
+            for i, (k, v) in enumerate(sorted(counter.items())):
+                df_tmp = df[df['PatternMatch'] == k]
+                tmp_spans = [(s, e, mc) for s, e, mc in df_tmp[['Start', 'End', 'MC']].values]
+                cov = calculate_span_coverage(tmp_spans, protein_length, accumulate=True)
 
-            cov_bin = calculate_span_coverage(tmp_spans, protein_length, accumulate=False)
+                cov_bin = calculate_span_coverage(tmp_spans, protein_length, accumulate=False)
 
-            c1, c2 = st.columns(2)
-            c1.metric(f'Protein Coverage with {k} motif matches', f'{round(sum(cov_bin) / len(cov_bin) * 100, 2)}%')
-            c2.metric(f'Peptides with {k} motif matches', v)
+                c1, c2 = st.columns(2)
+                c1.metric(f'Protein Coverage with {k} motif matches', f'{round(sum(cov_bin) / len(cov_bin) * 100, 2)}%')
+                c2.metric(f'Peptides with {k} motif matches', v)
 
-            protein_coverage = coverage_string(cov, stripped_protein_sequence)
-            st.markdown(protein_coverage, unsafe_allow_html=True)
-            create_and_display_colorbar(max(cov))
+                protein_coverage = coverage_string(cov, stripped_protein_sequence, cmap)
+                st.markdown(protein_coverage, unsafe_allow_html=True)
 
-            if i >= 5:
-                st.warning('Warning: High motif match counts may result in long runtimes. Stopping...')
-                break
+                f = create_colorbar(max(cov), cmap)
+                st.pyplot(f)
+
+                if i >= 5:
+                    st.warning('Warning: High motif match counts may result in long runtimes. Stopping...')
+                    break
 
 with t4:
     st.markdown(PROTEASE_WIKI)
@@ -473,3 +447,53 @@ with t5:
 
     st.subheader('Proteases:')
     st.write(VALID_PROTEASES)
+
+with t6:
+    st.subheader('Download Models')
+
+
+    def get_model_file_as_byte_stream(path):
+        with open(path, 'rb') as file:
+            byte_stream = file.read()
+        return byte_stream
+
+
+    # download models
+    c1, c2, c3 = st.columns(3)
+    c1.download_button(
+        label='Download RT Model',
+        data=get_model_file_as_byte_stream('rt_model.pkl'),
+        file_name="rt_model.pkl",
+        mime='application/octet-stream'
+    )
+    c2.download_button(
+        label='Download IM Model',
+        data=get_model_file_as_byte_stream('im_model.pkl'),
+        file_name="im_model.pkl",
+        mime='application/octet-stream'
+    )
+    c3.download_button(
+        label='Download Proteotypic Model',
+        data=get_model_file_as_byte_stream('proteotypic_model.pkl'),
+        file_name="proteotypic_model.pkl",
+        mime='application/octet-stream'
+    )
+
+    st.write('---')
+
+    st.subheader('Example Usage')
+
+    st.code(MODEL_CODE)
+
+    st.write('---')
+
+    st.subheader('About')
+
+    with st.expander('Proteotypic Peptide Prediction Model', expanded=True):
+        st.markdown(PROTEOTYPIC_MODEL_HELP)
+
+    with st.expander('RT Prediction Model', expanded=False):
+        st.markdown(RT_MODEL_HELP)
+
+    with st.expander('IM Prediction Model', expanded=False):
+        st.markdown(IM_MODEL_HELP)
