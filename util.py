@@ -10,8 +10,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib as mpl
 
-from constants import LINK, CMAP
-
+from constants import LINK
 
 def make_clickable(sequence, mass_type):
     # target _blank to open new window

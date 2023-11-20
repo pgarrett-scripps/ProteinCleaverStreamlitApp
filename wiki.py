@@ -183,21 +183,47 @@ resolution instruments, it may be more appropriate to use average mass.
 """
 
 HELP ="""
+### Introduction to Protein Cleaver
+Protein Cleaver is a versatile tool for protein analysis and digestion. It offers a range of features to help users:
 
-**Protein Cleaver** is an app to compute protease-specific cleavage sites and peptides.
+1. **Identify Cleavage Sites:** Protein Cleaver assists in locating cleavage sites within protein sequences.
 
-You can input your protein sequence in **FASTA format** (Don't worry if the sequence spans multiple lines), 
-or input the proteins accession number (e.g. P04406) / protein identifier (e.g. ALBU_HUMAN). 
-Get started and unveil the peptides!
+2. **Generate and Filter Peptides:** Users can generate peptides and apply filters to refine the selection.
 
-You can globally specify **static modifications** to be applied to all amino acids, or directly include them in the
-sequence. Modifications are specified by parenthesis, while terminal modifications use square brackets.
+3. **View Protein Sequence Coverage:** Gain insights into the coverage of a protein sequence by the generated peptides.
 
-Example: `[-13]MAS(1.2345)FRLFLLCLAGLVFVS[57.0]`
+4. **Search for Motifs:** Easily search for specific motifs within the resulting peptides.
 
-## Column Labels
+Protein Cleaver is particularly valuable in understanding why certain peptides might go unnoticed in mass 
+spectrometry experiments. Potential reasons include overly strict search parameters or the physical and chemical 
+properties of the peptide. To investigate the latter, Protein Cleaver can create a list of peptides that are 
+likely to be generated and identified from a given protein sequence, referred to as proteotypic peptides.
 
-**Sequence**:The peptide sequence.
+Moreover, if users are interested in specific motifs like phosphorylation sites or particular amino acid residues, 
+Protein Cleaver can assist in generating a list of peptides that contain these motifs. It also provides a 
+visualization of motif coverage across the protein sequence, aiding in comprehensive analysis.
+
+#### Inputting Your Protein Sequence:
+- **FASTA Format Compatibility**: You can input your protein sequence in the FASTA format. Don't worry if your 
+sequence extends over multiple lines;
+- **Accession Number or Protein Identifier**: Alternatively, you can use a protein's accession number (e.g., P04406) 
+or its unique protein identifier (e.g., ALBU_HUMAN) to retrieve and analyze the sequence.
+
+#### Specifying Modifications:
+- **Static Modifications**: You have the option to apply static modifications globally to all amino acids in the 
+sequence.
+- **Direct Sequence Modifications**: Modifications can also be included directly in the sequence. Use parentheses for 
+standard modifications and square brackets for terminal modifications.
+  
+  Example: `[-13]MAS(1.2345)FRLFLLCLAGLVFVS[57.0]` indicates specific modifications at both the start and end of the 
+  peptide sequence, as well as within it.
+  
+"""
+
+COLUMN_DESCRIPTIONS = """
+### Column Descriptions
+
+**Sequence**: The peptide sequence.
 
 **Start**: The position in the original protein sequence where this peptide begins (0 based indexing).
 
@@ -222,13 +248,16 @@ on the selected option.
 
 **Proteotypic**: Indicates whether the peptide is proteotypic or not, determined using a XGBoost model.
 
+**Motifs**: Indicates the number of motif matches within the peptide sequence.
+"""
 
+CONTACT = """
 If you encounter any issues or have suggestions for improvement, please contact pgarrett@scripps.edu.
 This is a work in progress and your feedback is greatly appreciated!
 """
 
 PROTEOTYPIC_MODEL_HELP = """
-### Proteotypic Peptide Prediction Model
+### Proteotypic Model
 
 #### Overview
 This report details the development and evaluation of a machine learning model for predicting whether a peptide 
@@ -271,7 +300,7 @@ a feature vector for model input.
 
 RT_MODEL_HELP = """
 
-### Retention Time Prediction Model
+### RT Model
 
 #### Overview
 This report details the development and evaluation of a machine learning model for predicting the retention time of a 
@@ -297,7 +326,7 @@ a feature vector for model input.
 """
 
 IM_MODEL_HELP = """
-### Ion Mobility Prediction Model
+### IM Model
 
 #### Overview
 This report details the development and evaluation of a machine learning model for predicting the ion mobility of a 
@@ -327,6 +356,7 @@ import pickle
 import pandas as pd
 from collections import Counter
 import numpy as np
+import xgboost as xgb
 
 def bin_aa_counts(seq, charge=None):
     amino_acids = 'ACDEFGHIKLMNPQRSTVWY'

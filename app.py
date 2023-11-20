@@ -1,6 +1,7 @@
 import pickle
 from collections import Counter
 
+import pandas as pd
 import streamlit as st
 import numpy as np
 import requests
@@ -15,7 +16,16 @@ from constants import *
 from wiki import *
 from util import make_clickable, generate_peptide_df, bin_aa_counts, coverage_string, create_colorbar
 
-# TODO: add color gradient to protein coverage to show the most covered regions
+
+def fetch_sequence_from_uniprot(accession_number):
+    url = f"https://www.uniprot.org/uniprot/{accession_number}.fasta"
+    response = requests.get(url)
+    if response.status_code != 200:
+        st.error(f"Error fetching sequence from UniProt: {response.status_code}")
+        st.stop()
+        return None
+    return ''.join(response.text.split('\n')[1:])  # Remove the header line
+
 
 st.set_page_config(page_title="proteincleaver", page_icon=":knife:", layout="wide")
 
@@ -29,23 +39,8 @@ hide_table_row_index = """
 # Inject CSS with Markdown
 st.markdown(hide_table_row_index, unsafe_allow_html=True)
 
-
-@st.cache_data
-def fetch_sequence_from_uniprot(accession_number):
-    url = f"https://www.uniprot.org/uniprot/{accession_number}.fasta"
-    response = requests.get(url)
-    if response.status_code != 200:
-        st.error(f"Error fetching sequence from UniProt: {response.status_code}")
-        st.stop()
-        return None
-    return ''.join(response.text.split('\n')[1:])  # Remove the header line
-
-
 with st.sidebar:
     st.title('Protein Cleaver 🔪')
-    st.markdown("""
-    **Protein Cleaver** is an app to compute protease-specific cleavage sites and peptides.
-    """)
 
     protein_id = st.text_input(label='Protein accession number / identifier',
                                value='',
@@ -106,14 +101,14 @@ with st.sidebar:
         enzyme_regexes.append(custom_regex)
 
     c1, c2 = st.columns(2)
-    min_peptide_len = c1.number_input(label='Min peptide length',
+    min_peptide_len = c1.number_input(label='Min length',
                                       min_value=MIN_PEPTIDE_LEN,
                                       max_value=MAX_PEPTIDE_LEN,
                                       value=DEFAULT_MIN_PEPTIDE_LEN,
                                       step=PEPTIDE_LEN_STEP,
                                       help='Minimum peptide length (inclusive)')
 
-    max_peptide_len = c2.number_input(label='Max peptide length',
+    max_peptide_len = c2.number_input(label='Max length',
                                       min_value=MIN_PEPTIDE_LEN,
                                       max_value=MAX_PEPTIDE_LEN,
                                       value=DEFAULT_MAX_PEPTIDE_LEN,
@@ -125,19 +120,19 @@ with st.sidebar:
         st.stop()
 
     c3, c4 = st.columns(2)
-    min_mass = c3.number_input(label='Min peptide mass',
+    min_mass = c3.number_input(label='Min neutral mass',
                                min_value=MIN_PEPTIDE_MASS,
                                max_value=MAX_PEPTIDE_MASS,
                                value=DEFAULT_MIN_PEPTIDE_MASS,
                                step=PEPTIDE_MASS_STEP,
-                               help='Minimum peptide mass (inclusive)')
+                               help='Minimum peptide neutral mass (inclusive)')
 
-    max_mass = c4.number_input(label='Max peptide mass',
+    max_mass = c4.number_input(label='Max neutral mass',
                                min_value=MIN_PEPTIDE_MASS,
                                max_value=MAX_PEPTIDE_MASS,
                                value=DEFAULT_MAX_PEPTIDE_MASS,
                                step=PEPTIDE_MASS_STEP,
-                               help='Maximum peptide mass (inclusive)')
+                               help='Maximum peptide neutral mass (inclusive)')
 
     if min_mass > max_mass:
         st.error('Min mass must be less than max mass')
@@ -313,10 +308,10 @@ df.sort_values(by=['MC'], inplace=True)
 df.drop_duplicates(subset=['Start', 'Sequence', 'Semi'], inplace=True)
 df.sort_values(by=['Start', 'Len'], inplace=True)
 
-t1, t2, t3, t4, t5, t6 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help',
-                                  'Machine Learning'])
+t1, t2, t3, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Help'])
 
 with t1:
+    st.header('Digestion Metrics')
     c1, c2, c3, c4 = st.columns(4)
     c1.metric('Total Peptides', len(df))
     c2.metric('Semi Peptides', len(df[df['Semi']]))
@@ -324,7 +319,7 @@ with t1:
     c4.metric('Unique Peptides', len(df['Sequence'].unique()))
 
     st.subheader('Peptides')
-    clickable = st.checkbox('Peptide Fragmenter Links', value=True)
+    clickable = st.checkbox('Peptide Fragmenter Links', value=False)
 
     if clickable:
         df_clickable = df.copy(deep=True)
@@ -336,6 +331,8 @@ with t1:
         st.dataframe(df, use_container_width=True)
 
 with t2:
+    st.header('Cleavage & Coverage')
+
     c1, c2 = st.columns(2)
     c1.metric('Cleavage Sites', len(sites))
 
@@ -343,20 +340,20 @@ with t2:
     protein_cov_perc = round(sum(protein_cov_arr_bin) / len(protein_cov_arr_bin) * 100, 2)
     c2.metric('Protein Coverage', f'{protein_cov_perc}%')
 
-    st.subheader('Site Indexes', help='Red % are cleavage sites')
+    st.subheader('Site Indexes')
     st.markdown(site_indexes_html, unsafe_allow_html=True)
     st.write("")
-    st.subheader('Sites', help='Red amino acids are cleavage sites')
+    st.subheader('Sites')
     st.markdown(sequence_with_sites, unsafe_allow_html=True)
 
-    st.subheader('Sequence Coverage', help='Red amino acids are covered by peptides')
+    st.subheader('Sequence Coverage')
     st.markdown(protein_coverage, unsafe_allow_html=True)
 
     # Example usage in a Streamlit app
     f = create_colorbar(max(protein_cov_arr), cmap)
     st.pyplot(f)
 
-    st.subheader('Coverage vs Missed Cleavages')
+    st.caption('Coverage vs Missed Cleavages')
     st.line_chart(data={'Missed Cleavages': mcs, 'Protein Coverage (%)': protein_cov_at_mcs},
                   x='Missed Cleavages', y='Protein Coverage (%)')
 
@@ -369,11 +366,8 @@ with t2:
                   x='Peptide Mass', y='Protein Coverage (%)')
 
 with t3:
-    st.subheader('Peptide Pattern Identification')
-    st.write('This page identifies and tallies occurrences of your specified pattern within the digested peptides.'
-             ' It provides a count of how many times each pattern appears in every peptide.')
-
-    site_regex = st.text_input('Enter Pattern Regex', '(K)')
+    st.header('Motif Analysis')
+    site_regex = st.text_input('Motifs Regex', '(K)')
 
     if site_regex:
         sites = identify_cleavage_sites(stripped_protein_sequence, site_regex)
@@ -381,10 +375,10 @@ with t3:
         site_counts = []
         for row in df[['Start', 'End']].values:
             site_counts.append(sum([1 for site in sites if row[0] <= site < row[1]]))
-        df['PatternMatch'] = site_counts
+        df['Motifs'] = site_counts
 
         cov_site_mat = [0] * len(stripped_protein_sequence)
-        for row in df[['Start', 'End', 'PatternMatch']].values:
+        for row in df[['Start', 'End', 'Motifs']].values:
 
             if row[2] == 0:
                 continue
@@ -419,7 +413,7 @@ with t3:
         st.pyplot(f)
         with st.expander('Show Coverage Table'):
             for i, (k, v) in enumerate(sorted(counter.items())):
-                df_tmp = df[df['PatternMatch'] == k]
+                df_tmp = df[df['Motifs'] == k]
                 tmp_spans = [(s, e, mc) for s, e, mc in df_tmp[['Start', 'End', 'MC']].values]
                 cov = calculate_span_coverage(tmp_spans, protein_length, accumulate=True)
 
@@ -439,61 +433,72 @@ with t3:
                     st.warning('Warning: High motif match counts may result in long runtimes. Stopping...')
                     break
 
-with t4:
-    st.markdown(PROTEASE_WIKI)
+#with t4:
+#    st.markdown(PROTEASE_WIKI)
 
 with t5:
-    st.markdown(HELP)
 
-    st.subheader('Proteases:')
-    st.write(VALID_PROTEASES)
+    st.header('Help')
 
-with t6:
-    st.subheader('Download Models')
+    st.subheader('General')
 
+    with st.expander('Protein Cleaver Overview'):
+        st.markdown(HELP)
 
-    def get_model_file_as_byte_stream(path):
-        with open(path, 'rb') as file:
-            byte_stream = file.read()
-        return byte_stream
+    with st.expander('Column Descriptions'):
+        st.markdown(COLUMN_DESCRIPTIONS)
 
+    with st.expander('Protease Regexes'):
+        st.subheader('Protease Regexes')
+        data = [{'Name': k, 'Regex': v} for k, v in PROTEASES.items()]
+        protease_df = pd.DataFrame(data)
+        st.table(protease_df)
 
-    # download models
-    c1, c2, c3 = st.columns(3)
-    c1.download_button(
-        label='Download RT Model',
-        data=get_model_file_as_byte_stream('rt_model.pkl'),
-        file_name="rt_model.pkl",
-        mime='application/octet-stream'
-    )
-    c2.download_button(
-        label='Download IM Model',
-        data=get_model_file_as_byte_stream('im_model.pkl'),
-        file_name="im_model.pkl",
-        mime='application/octet-stream'
-    )
-    c3.download_button(
-        label='Download Proteotypic Model',
-        data=get_model_file_as_byte_stream('proteotypic_model.pkl'),
-        file_name="proteotypic_model.pkl",
-        mime='application/octet-stream'
-    )
+    with st.expander('Contact'):
+        st.markdown(CONTACT)
 
-    st.write('---')
+    st.subheader('Models')
 
-    st.subheader('Example Usage')
+    with st.expander('IM Model'):
+        st.markdown(IM_MODEL_HELP)
 
-    st.code(MODEL_CODE)
-
-    st.write('---')
-
-    st.subheader('About')
-
-    with st.expander('Proteotypic Peptide Prediction Model', expanded=True):
-        st.markdown(PROTEOTYPIC_MODEL_HELP)
-
-    with st.expander('RT Prediction Model', expanded=False):
+    with st.expander('RT Model'):
         st.markdown(RT_MODEL_HELP)
 
-    with st.expander('IM Prediction Model', expanded=False):
-        st.markdown(IM_MODEL_HELP)
+    with st.expander('Proteotypic Model'):
+        st.markdown(PROTEOTYPIC_MODEL_HELP)
+
+    with st.expander('How to use ML Models?'):
+
+        def get_model_file_as_byte_stream(path):
+            with open(path, 'rb') as file:
+                byte_stream = file.read()
+            return byte_stream
+
+
+        st.subheader('Download Models')
+        # download models
+        c1, c2, c3 = st.columns(3)
+        c1.download_button(
+            label='RT Model',
+            data=get_model_file_as_byte_stream('rt_model.pkl'),
+            file_name="rt_model.pkl",
+            mime='application/octet-stream'
+        )
+        c2.download_button(
+            label='IM Model',
+            data=get_model_file_as_byte_stream('im_model.pkl'),
+            file_name="im_model.pkl",
+            mime='application/octet-stream'
+        )
+        c3.download_button(
+            label='Proteotypic Model',
+            data=get_model_file_as_byte_stream('proteotypic_model.pkl'),
+            file_name="proteotypic_model.pkl",
+            mime='application/octet-stream'
+        )
+
+        st.subheader('Example Code')
+        st.code(MODEL_CODE)
+
+
