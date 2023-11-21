@@ -1,5 +1,3 @@
----
-
 # Protein Cleaver 🔪
 
 Protein Cleaver is a versatile tool for protein analysis and digestion. It offers a range of features to help users:
