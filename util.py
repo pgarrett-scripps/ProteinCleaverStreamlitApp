@@ -12,7 +12,7 @@ from peptacular.spans import build_enzymatic_spans, build_semi_spans
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib as mpl
-from peptacular.term import add_n_term_modification, add_c_term_modification
+from peptacular.term.modification import add_n_term_modification, add_c_term_modification
 
 from constants import LINK
 
@@ -21,13 +21,6 @@ def fetch_sequence_from_uniprot(accession_number):
     url = f"https://www.uniprot.org/uniprot/{accession_number}.fasta"
     response = requests.get(url)
     return response
-
-
-def make_clickable(sequence, mass_type):
-    # target _blank to open new window
-    # extract clickable text to display for your link
-    link = LINK + f'?sequence={sequence}&mass_type={mass_type}'
-    return f'<a target="_blank" href="{link}">{sequence}</a>'
 
 
 def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: int, min_len: int,
@@ -60,7 +53,7 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
     df = df[(df['Len'] >= min_len) & (df['Len'] <= max_len)]
 
     # Apply variable modifications to each sequence in the DataFrame
-    def apply_var_mods(sequence):
+    def apply_var_mods(sequence: str) -> str:
 
         var_seqs = apply_variable_modifications(sequence, var_mods, max_var_mods)
 
@@ -92,15 +85,17 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
     # expand the sequence column into multiple rows (sequences are separated by ';')
     df = df.assign(Sequence=df.Sequence.str.split(';')).explode('Sequence')
 
-    def apply_static_mods(sequence):
-        # Update var_mods dictionary based on conditions
-        if n_term_static_mod:
-            var_mods.update({-1: n_term_static_mod})
-        if c_term_static_mod:
-            var_mods.update({calculate_sequence_length(sequence): c_term_static_mod})
+    def apply_static_mods(sequence: str) -> str:
 
-        # Apply variable modifications and join them with ';'
-        return apply_static_modifications(sequence, static_mods)
+        sequence = apply_static_modifications(sequence, static_mods)
+
+        if n_term_static_mod:
+            sequence = add_n_term_modification(sequence, n_term_static_mod)
+
+        if c_term_static_mod:
+            sequence = add_c_term_modification(sequence, c_term_static_mod)
+
+        return sequence
 
     df['Sequence'] = df['Sequence'].apply(apply_static_mods)
 
@@ -246,3 +241,10 @@ def generate_app_url(protein_id, protein_sequence, proteases, custom_regex, miss
     }
     query_string = '&'.join([f'{key}={value}' for key, value in params.items() if value is not None])
     return f'{base_url}?{query_string}'
+
+
+def make_clickable(sequence, mass_type):
+    # target _blank to open new window
+    # extract clickable text to display for your link
+    link = LINK + f'?sequence={sequence}&mass_type={mass_type}'
+    return link

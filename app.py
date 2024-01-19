@@ -1,6 +1,5 @@
 import uuid
 from collections import Counter
-import random
 
 import pandas as pd
 import streamlit as st
@@ -14,39 +13,39 @@ import regex as reg
 
 from constants import *
 from wiki import *
-from util import make_clickable, generate_peptide_df, coverage_string, create_colorbar, generate_app_url, \
-    fetch_sequence_from_uniprot
+from util import generate_peptide_df, coverage_string, create_colorbar, generate_app_url, fetch_sequence_from_uniprot, \
+    make_clickable
 
 st.set_page_config(page_title="proteincleaver", page_icon=":knife:", layout="wide")
 
 # Parse query parameters
-params = st.experimental_get_query_params()
-query_peptide_sequence = params.get('protein_sequence', [DEFAULT_PROTEIN_SEQUENCE])[0]
-query_proteases = params.get('proteases', [';'.join(DEFAULT_PROTEASES)])[0].split(',')
-query_custom_regex = params.get('custom_regex', [''])[0]
-query_missed_cleavages = int(params.get('missed_cleavages', [DEFAULT_MISSED_CLEAVAGES])[0])
-query_mass_type = params.get('mass_type', [DEFAULT_MASS_TYPE])[0]
-query_min_peptide_len = int(params.get('min_peptide_len', [DEFAULT_MIN_PEPTIDE_LEN])[0])
-query_max_peptide_len = int(params.get('max_peptide_len', [DEFAULT_MAX_PEPTIDE_LEN])[0])
-query_min_mass = float(params.get('min_mass', [DEFAULT_MIN_PEPTIDE_MASS])[0])
-query_max_mass = float(params.get('max_mass', [DEFAULT_MAX_PEPTIDE_MASS])[0])
-query_semi_enzymatic = params.get('semi_enzymatic', ['False'])[0].lower() == 'true'
-query_infer_charge = params.get('infer_charge', ['True'])[0].lower() == 'true'
-query_min_charge = int(params.get('min_charge', [DEFAULT_MIN_CHARGE])[0])
-query_max_charge = int(params.get('max_charge', [DEFAULT_MAX_CHARGE])[0])
-query_min_mz = float(params.get('min_mz', [DEFAULT_MIN_MZ])[0])
-query_max_mz = float(params.get('max_mz', [DEFAULT_MAX_MZ])[0])
-query_remove_non_proteotypic = params.get('remove_non_proteotypic', ['False'])[0].lower() == 'true'
-query_n_term_static_mod = float(params.get('n_term_static_mod', [0.0])[0])
-query_c_term_static_mod = float(params.get('c_term_static_mod', [0.0])[0])
-query_num_static_mods = int(params.get('num_static_mods', [DEFAULT_STATIC_MODS])[0])
-query_n_term_var_mod = float(params.get('n_term_var_mod', [0.0])[0])
-query_c_term_var_mod = float(params.get('c_term_var_mod', [0.0])[0])
-query_max_var_mods = int(params.get('max_var_mods', [DEFAULT_MAX_VAR_MODS])[0])
-query_num_variable_mods = int(params.get('num_variable_mods', [DEFAULT_VAR_MODS])[0])
-query_static_mods_str = params.get('static_mods', ['C:57.02146'])[0]
+params = st.query_params
+query_peptide_sequence = params.get('protein_sequence', DEFAULT_PROTEIN_SEQUENCE)
+query_proteases = params.get('proteases', ';'.join(DEFAULT_PROTEASES)).split(',')
+query_custom_regex = params.get('custom_regex', '')
+query_missed_cleavages = int(params.get('missed_cleavages', DEFAULT_MISSED_CLEAVAGES))
+query_mass_type = params.get('mass_type', DEFAULT_MASS_TYPE)
+query_min_peptide_len = int(params.get('min_peptide_len', DEFAULT_MIN_PEPTIDE_LEN))
+query_max_peptide_len = int(params.get('max_peptide_len', DEFAULT_MAX_PEPTIDE_LEN))
+query_min_mass = float(params.get('min_mass', DEFAULT_MIN_PEPTIDE_MASS))
+query_max_mass = float(params.get('max_mass', DEFAULT_MAX_PEPTIDE_MASS))
+query_semi_enzymatic = params.get('semi_enzymatic', 'False').lower() == 'true'
+query_infer_charge = params.get('infer_charge', 'False').lower() == 'true'
+query_min_charge = int(params.get('min_charge', DEFAULT_MIN_CHARGE))
+query_max_charge = int(params.get('max_charge', DEFAULT_MAX_CHARGE))
+query_min_mz = float(params.get('min_mz', DEFAULT_MIN_MZ))
+query_max_mz = float(params.get('max_mz', DEFAULT_MAX_MZ))
+query_remove_non_proteotypic = params.get('remove_non_proteotypic', 'False').lower() == 'true'
+query_n_term_static_mod = float(params.get('n_term_static_mod', 0.0))
+query_c_term_static_mod = float(params.get('c_term_static_mod', 0.0))
+query_num_static_mods = int(params.get('num_static_mods', DEFAULT_STATIC_MODS))
+query_n_term_var_mod = float(params.get('n_term_var_mod', 0.0))
+query_c_term_var_mod = float(params.get('c_term_var_mod', 0.0))
+query_max_var_mods = int(params.get('max_var_mods', DEFAULT_MAX_VAR_MODS))
+query_num_variable_mods = int(params.get('num_variable_mods', DEFAULT_VAR_MODS))
+query_static_mods_str = params.get('static_mods', 'C:57.02146')
 query_static_mods = [(s.split(':')[0], float(s.split(':')[1])) for s in query_static_mods_str.split(';') if s]
-query_variable_mods_str = params.get('variable_mods', [''])[0]
+query_variable_mods_str = params.get('variable_mods', '')
 query_variable_mods = [(s.split(':')[0], float(s.split(':')[1])) for s in query_variable_mods_str.split(';') if s]
 
 # CSS to inject contained in a string
@@ -124,7 +123,8 @@ with st.sidebar:
     custom_regex = c2.text_input(label='(Additional) Custom protease',
                                  value=query_custom_regex,
                                  help='A custom regular expression to use for digestion. Will be used along with '
-                                      'selected proteases')
+                                      'selected proteases. For example a regex expression for trypsin would look like: '
+                                      '([KR])')
 
     c1, c2 = st.columns(2)
     missed_cleavages = c1.number_input(label='Max missed cleavages',
@@ -424,23 +424,25 @@ t1, t2, t3, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Ana
 
 with t1:
     st.header('Digestion Metrics')
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     c1.metric('Total Peptides', len(df))
     c2.metric('Semi Peptides', len(df[df['Semi']]))
     c3.metric('Enzymatic Peptides', len(df[~df['Semi']]))
-    c4.metric('Unique Peptides', len(df['Sequence'].unique()))
 
     st.subheader('Peptides')
-    clickable = st.checkbox('Peptide Fragmenter Links', value=False)
 
-    if clickable:
-        df_clickable = df.copy(deep=True)
-        df_clickable['Sequence'] = [make_clickable(peptide, mass_type) for peptide in
-                                    df_clickable['Sequence']]
-        st.caption('Click on a sequence to see the fragment ions!')
-        st.write(df_clickable.to_html(escape=False), unsafe_allow_html=True, use_container_width=True)
-    else:
-        st.dataframe(df, use_container_width=True)
+    df['Link'] = [make_clickable(peptide, mass_type) for peptide in df['Sequence']]
+
+    st.dataframe(
+        df,
+        column_config={
+            "Link": st.column_config.LinkColumn(
+                display_text="View Ions"),
+        },
+        hide_index=True,
+    )
+
+
 
 with t2:
     st.header('Cleavage & Coverage')
@@ -479,10 +481,16 @@ with t2:
 
 with t3:
     st.header('Motif Analysis')
-    motif_regex = st.text_input('Motifs Regex', '(K)')
+    c1, c2, c3 = st.columns(3)
+    motif_regex = c1.text_input('Motifs Regex', '(K)')
+
+    st.cache_data()
+    def get_motif_sites(motif_regex, stripped_protein_sequence):
+        motif_sites = list(reg.finditer(motif_regex, stripped_protein_sequence, overlapped=True))
+        return motif_sites
 
     if motif_regex:
-        motif_sites = list(reg.finditer(motif_regex, stripped_protein_sequence, overlapped=True))
+        motif_sites = get_motif_sites(motif_regex, stripped_protein_sequence)
 
         def count_motifs(row):
             return sum([1 for site in motif_sites if row['Start'] <= site.start() < row['End']])
@@ -506,17 +514,27 @@ with t3:
                         else:
                             motif_cov_array[i] = min(row[2], motif_cov_array[i])
 
+
+        min_moitifs = c2.number_input('Min Motifs', min_value=0, max_value=max(df['Motifs']), value=0)
+        max_motifs = c3.number_input('Max Motifs', min_value=0, max_value=max(df['Motifs']), value=max(df['Motifs']))
+        df = df[(df['Motifs'] >= min_moitifs) & (df['Motifs'] <= max_motifs)]
+
         st.subheader('Peptides')
-        clickable2 = st.checkbox('Peptide Fragmenter Links', value=False, key=1)
-        if clickable2:
-            df_clickable = df.copy(deep=True)
-            df_clickable['Sequence'] = [make_clickable(peptide, mass_type) for peptide in df_clickable['Sequence']]
-            st.caption('Click on a sequence to see the fragment ions!')
-            st.write(df_clickable.to_html(escape=False), unsafe_allow_html=True, use_container_width=True)
-        else:
-            st.dataframe(df, use_container_width=True)
+
+        # Make the Link column the last column int he dataframe
+        df = df[[c for c in df if c not in ['Link']] + ['Link']]
+
+        st.dataframe(
+            df,
+            column_config={
+                "Link": st.column_config.LinkColumn(
+                    display_text="View Ions"),
+            },
+            hide_index=True,
+        )
 
         counter = Counter(df['Motifs'])
+
 
         st.subheader('Motif Site Coverage', help='The color corresponds to the peptide with the fewest number of motif '
                                                  'matches (excluding 0 matches). Example: Lets assume that the first '

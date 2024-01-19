@@ -1,6 +1,6 @@
 pandas==2.1.3
-streamlit==1.28.2
-peptacular==1.0.1
+streamlit==1.30.0
+peptacular==1.2.0
 requests==2.31.0
 matplotlib==3.7.2
 numpy==1.25.1
