@@ -356,7 +356,6 @@ with st.expander('Edit Sites'):
                             default=sites)
 
 
-
 df = generate_peptide_df(protein_sequence, sites, missed_cleavages, min_peptide_len, max_peptide_len,
                          semi_enzymatic, static_mods, min_mass, max_mass, is_mono, infer_charge, min_charge,
                          max_charge, min_mz, max_mz, var_mods, max_var_mods, n_term_static_mod, c_term_static_mod,
