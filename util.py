@@ -14,7 +14,7 @@ import matplotlib.colors as mcolors
 import matplotlib as mpl
 from peptacular.term.modification import add_n_term_modification, add_c_term_modification
 
-from constants import LINK
+from constants import LINK, BASE_URL
 
 
 def fetch_sequence_from_uniprot(accession_number):
@@ -198,7 +198,6 @@ def generate_app_url(protein_id, protein_sequence, proteases, custom_regex, miss
                      min_charge, max_charge, min_mz, max_mz, remove_non_proteotypic, n_term_static_mod,
                      c_term_static_mod, num_static_mods, n_term_var_mod, c_term_var_mod, max_var_mods,
                      num_variable_mods, static_mods, variable_mods):
-    base_url = 'http://localhost:8501/'
 
     # flip the dictionary
     static_mods_rev = {}
@@ -240,7 +239,7 @@ def generate_app_url(protein_id, protein_sequence, proteases, custom_regex, miss
         'variable_mods': variable_mod_str
     }
     query_string = '&'.join([f'{key}={value}' for key, value in params.items() if value is not None])
-    return f'{base_url}?{query_string}'
+    return f'{BASE_URL}?{query_string}'
 
 
 def make_clickable(sequence, mass_type):
