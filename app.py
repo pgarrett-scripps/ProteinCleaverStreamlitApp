@@ -184,7 +184,7 @@ with st.sidebar:
 
     c1, c2 = st.columns(2)
 
-    semi_enzymatic = c1.checkbox(label='Semi enzymatic?',
+    semi_enzymatic = c1.checkbox(label='Semi enzymatic',
                                  help='Allow semi enzymatic peptides?',
                                  value=query_semi_enzymatic)
     infer_charge = c2.checkbox(label='Infer charge',
@@ -349,11 +349,11 @@ for enzyme_regex in enzyme_regexes:
     sites.update(identify_cleavage_sites(protein_sequence, enzyme_regex))
 sites = sorted(list(sites))
 
-with st.expander('Edit Sites'):
-    sites = st.multiselect(label="Sites",
-                            options=list(range(len(stripped_protein_sequence)+1)),
-                            help='The proteases to use for digestion',
-                            default=sites)
+#with st.expander('Edit Sites'):
+#    sites = st.multiselect(label="Sites",
+#                            options=list(range(len(stripped_protein_sequence)+1)),
+#                            help='The proteases to use for digestion',
+#                            default=sites)
 
 
 df = generate_peptide_df(protein_sequence, sites, missed_cleavages, min_peptide_len, max_peptide_len,
@@ -431,16 +431,17 @@ with t1:
     st.subheader('Peptides')
 
     df['Link'] = [make_clickable(peptide, mass_type) for peptide in df['Sequence']]
-
+    cols_to_show = df.columns.tolist()
+    cols_to_show.remove('StrippedPeptide')
     st.dataframe(
-        df,
+        df[cols_to_show],
         column_config={
             "Link": st.column_config.LinkColumn(
-                display_text="View Ions"),
+                display_text="ions"),
         },
         hide_index=True,
+        use_container_width=True
     )
-
 
 
 with t2:
