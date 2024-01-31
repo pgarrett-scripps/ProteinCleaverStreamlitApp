@@ -419,7 +419,7 @@ for m in masses:
 
 st.write(f'##### [Analysis URL]({url}) (copy me and send to your friends!)')
 
-t1, t2, t3, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Help'])
+t1, t2, t3, t4, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help'])
 
 with t1:
     st.header('Digestion Metrics')
@@ -566,8 +566,8 @@ with t3:
                     st.warning('Warning: High motif match counts may result in long runtimes. Stopping...')
                     break
 
-# with t4:
-#    st.markdown(PROTEASE_WIKI)
+with t4:
+    st.markdown(PROTEASE_WIKI)
 
 with t5:
     st.header('Help')
@@ -631,3 +631,4 @@ with t5:
 
         st.subheader('Example Code')
         st.code(MODEL_CODE)
+

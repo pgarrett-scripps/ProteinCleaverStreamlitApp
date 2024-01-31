@@ -42,46 +42,28 @@ After the cleavage has occurred, the smaller peptide sequences are released from
 can then go on to catalyze another reaction.  
 
 
-Since there is still another active site in peptide 2, the protease can continue.  
-```
-Protease (Trypsin): Ready for next cleavage.
-
-Peptide 2:   A-T-G-A-K-Y-G-G-L
-                     ^
-                     |
-Protease (Trypsin): -K-
-```
-
 ## Missed Cleavages  
 
-A missed cleavage occurs when a protease fails to cleave a protein at a location where it typically would. Each type 
-of protease has specific target amino acid sequences where they are expected to cleave. However, in some cases, 
-the protease might not cleave at these specific sites. This event is termed as a missed cleavage.  
-
-### Causes  
+A missed cleavage occurs when a protease fails to cleave a protein at a location where it typically would. 
 
 Missed cleavages can occur for various reasons such as steric hindrance, modifications on the target residues, or 
 suboptimal reaction conditions. Steric hindrance might be caused by the protein's secondary, tertiary, or quaternary 
-structures which can prevent the protease from accessing the cleavage site. Post-translational modifications like 
-methylation, acetylation, or phosphorylation on the target residues can also influence cleavage efficiency. Additional 
-factors such as pH, temperature, and ionic strength of the reaction can also contribute to missed cleavages.
+structures which can prevent the protease from accessing the cleavage site. Post-translational modifications  
+on or around the target residues can also influence cleavage efficiency. Additional factors such as pH, temperature, 
+and ionic strength of the reaction can also contribute to missed cleavages.
 
-### Impact  
-
-Missed cleavages are of particular importance in proteomics research because they increase the complexity of peptide 
-mixtures, thus making protein identification and quantification more challenging. However, information about missed 
-cleavages can provide valuable insights into the protein's structure and modifications.
+Missed cleavages are of particular importance in proteomics because they increase the complexity of peptide 
+mixtures, thus making protein identification and quantification more challenging.
 
 ### Example  
 
-Consider the protein sequence,  **H-W-K-R-A-T-K-G-A-L-Y-G-G-L. Digestion** with trypsin, would be expected to yield 
+Consider the protein sequence,  **H-W-K-A-T-K-G-A-L-Y-G-G-L. Digestion** with trypsin, would be expected to yield 
 four peptides:
 
 A perfect cleavage scenario would yield four peptides:  
 
 ```  
 H-W-K  
-R  
 A-T-K  
 G-A-L-Y-G-G-L  
 ```  
@@ -90,8 +72,7 @@ But if the first cleavage site is missed, we would end up with a different set o
 instead of two smaller ones. 
 
 ```  
-H-W-K-R  
-A-T-K  
+H-W-K-A-T-K 
 G-A-L-Y-G-G-L  
 ```  
 
@@ -100,19 +81,10 @@ G-A-L-Y-G-G-L
 Semi-enzymatic peptides are peptides produced during enzymatic digestion of proteins that have only one cleavage site 
 consistent with the specificity of the protease used.  
 
-### Explanation  
-
 During protein digestion, proteases cleave the protein at specific residues or sequences. In a perfect digestion 
 scenario, every peptide resulting from this process would have a cleavage site at both the C-terminus and N-terminus 
 (with the exception of the first and last peptides in the sequence, which naturally only have one enzymatic terminus).  
 
-However, incomplete digestion or other processes can result in peptides that only have a cleavage-consistent residue 
-at one terminus. These are referred to as semi-enzymatic peptides.  
-
-### Importance  
-
-The identification of semi-enzymatic peptides is important for comprehensive proteome coverage. It can provide 
-insights into protease efficiency, post-translational modifications, and protein structure.   
 ### Example  
 
 Consider digestion of the following protein sequence by trypsin: **T-V-K-A-T-R-G-L-I-M**. 
@@ -132,17 +104,14 @@ with a methionine, which is not a typical trypsin cleavage site.
 
 ## Static Modifications  
 
-A static modification (also referred to as a fixed modification) is a post-translational modification (PTM) where a 
-characteristic molecular group is permanently attached to an amino acid residue in a protein. This modification is 
-expected to occur at every instance of the specified residue(s) in every protein analyzed.
+A static modification (also referred to as a fixed modification) is a post-translational modification (PTM) which is
+expected to occur at every instance of the specified residue(s).
 
 For example, one of the most common static modifications is the carbamidomethylation of cysteine residues. In this 
 modification, iodoacetamide or iodoacetic acid reacts with the sulfhydryl group on the cysteine residue to form a 
 carbamidomethyl group. The mass of the cysteine residue is thus increased by 57.021464 Daltons (Da).  
 
-It is known as a "static" modification because it is assumed to occur 100% of the time at all specified residues. This 
-means that during mass spectrometry data analysis, the mass of the specified residues is adjusted to include the mass 
-of the modification, and the search algorithm does not consider the possibility of the residue being unmodified.  
+## Variable Modifications 
 
 Contrastingly, variable modifications are those that may or may not occur at every possible site, and these are handled 
 differently in data analysis. Common examples of variable modifications include methionine oxidation and protein 
