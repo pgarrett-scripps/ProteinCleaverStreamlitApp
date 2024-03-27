@@ -88,7 +88,7 @@ with st.sidebar:
         fetched_sequence = ''.join(response.text.split('\n')[1:])
         raw_sequence = fetched_sequence
 
-    raw_sequence = st.text_area(label="Protein sequence",
+    raw_sequence = st.text_area(label="Protein sequence (Proforma2.0 Notation)",
                                 value=raw_sequence,
                                 help='An amino acid sequence to digest. Any modifications will be preserved.',
                                 max_chars=MAX_PROTEIN_INPUT_LENGTH,
@@ -426,7 +426,7 @@ for m in masses:
     cov = pt.calculate_span_coverage(spans, protein_length)
     protein_cov_at_mass.append(sum(cov) / len(cov) * 100)
 
-st.write(f'##### [Analysis URL]({url}) (copy me and send to your friends!)')
+st.write(f'##### [Sharable URL]({url})')
 
 t1, t2, t3, t4, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help'])
 
