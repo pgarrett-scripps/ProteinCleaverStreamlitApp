@@ -426,7 +426,7 @@ for m in masses:
     cov = pt.calculate_span_coverage(spans, protein_length)
     protein_cov_at_mass.append(sum(cov) / len(cov) * 100)
 
-st.write(f'##### [Sharable URL]({url})')
+st.write(f'##### :link: [Sharable URL]({url})')
 
 t1, t2, t3, t4, t5 = st.tabs(['Digestion Metrics', 'Cleavage & Coverage', 'Motif Analysis', 'Wiki', 'Help'])
 

@@ -1,7 +1,7 @@
 import copy
 import os
 
-from peptacular.constants import PROTEASES
+import peptacular as pt
 
 
 def get_env_int(var_name, default):
@@ -77,7 +77,7 @@ DEFAULT_PROTEIN_SEQUENCE = "MASFRLFLLCLAGLVFVSEAGSVGAGEPKCPLMVKVLDAVRGSPAANVGVKV
 
 LINK = get_env_str('LINK', 'https://peptidefragmenter.streamlit.app/')
 
-VALID_PROTEASES = copy.deepcopy(PROTEASES)
+VALID_PROTEASES = copy.deepcopy(pt.PROTEASES)
 VALID_PROTEASES.pop('non-specific', None)
 VALID_PROTEASES = {k.replace(' ', '_'): v for k, v in VALID_PROTEASES.items()}
 
