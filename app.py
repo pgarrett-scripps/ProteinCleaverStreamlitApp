@@ -3,11 +3,7 @@ from collections import Counter
 
 import pandas as pd
 import streamlit as st
-from peptacular.sequence import strip_modifications, calculate_sequence_length
-from peptacular.digest import identify_cleavage_sites
-from peptacular.mass import valid_mass_sequence
-from peptacular.constants import AMINO_ACIDS
-from peptacular.spans import calculate_span_coverage
+import peptacular as pt
 import matplotlib as mpl
 import regex as reg
 
@@ -16,10 +12,14 @@ from wiki import *
 from util import generate_peptide_df, coverage_string, create_colorbar, generate_app_url, fetch_sequence_from_uniprot, \
     make_clickable
 
+# TODO: Add rt gradient input
+# TODO: Add CCS prediction since ook0 is relative to mass spec?
+
 st.set_page_config(page_title="proteincleaver", page_icon=":knife:", layout="wide")
 
 # Parse query parameters
 params = st.query_params
+protein_id = params.get('protein_id', '')
 query_peptide_sequence = params.get('protein_sequence', DEFAULT_PROTEIN_SEQUENCE)
 query_proteases = params.get('proteases', ';'.join(DEFAULT_PROTEASES)).split(',')
 query_custom_regex = params.get('custom_regex', '')
@@ -36,17 +36,18 @@ query_max_charge = int(params.get('max_charge', DEFAULT_MAX_CHARGE))
 query_min_mz = float(params.get('min_mz', DEFAULT_MIN_MZ))
 query_max_mz = float(params.get('max_mz', DEFAULT_MAX_MZ))
 query_remove_non_proteotypic = params.get('remove_non_proteotypic', 'False').lower() == 'true'
-query_n_term_static_mod = float(params.get('n_term_static_mod', 0.0))
-query_c_term_static_mod = float(params.get('c_term_static_mod', 0.0))
+query_n_term_static_mod = params.get('n_term_static_mod', '')
+query_c_term_static_mod = params.get('c_term_static_mod', '')
 query_num_static_mods = int(params.get('num_static_mods', DEFAULT_STATIC_MODS))
-query_n_term_var_mod = float(params.get('n_term_var_mod', 0.0))
-query_c_term_var_mod = float(params.get('c_term_var_mod', 0.0))
+query_n_term_var_mod = params.get('n_term_var_mod', '')
+query_c_term_var_mod = params.get('c_term_var_mod', '')
 query_max_var_mods = int(params.get('max_var_mods', DEFAULT_MAX_VAR_MODS))
 query_num_variable_mods = int(params.get('num_variable_mods', DEFAULT_VAR_MODS))
-query_static_mods_str = params.get('static_mods', 'C:57.02146')
-query_static_mods = [(s.split(':')[0], float(s.split(':')[1])) for s in query_static_mods_str.split(';') if s]
+query_static_mods_str = params.get('static_mods', 'C:Carbamidomethyl')
+query_static_mods = [(s.split(':')[0], ''.join(s.split(':')[1:])) for s in query_static_mods_str.split(';') if s]
 query_variable_mods_str = params.get('variable_mods', '')
-query_variable_mods = [(s.split(':')[0], float(s.split(':')[1])) for s in query_variable_mods_str.split(';') if s]
+query_variable_mods = [(s.split(':')[0], ''.join(s.split(':')[1:])) for s in query_variable_mods_str.split(';') if s]
+query_mod_mode = params.get('mod_mode', 'skip')
 
 # CSS to inject contained in a string
 hide_table_row_index = """
@@ -63,6 +64,9 @@ if 'protein_sequence_key' not in st.session_state:
 
 with st.sidebar:
     st.title('Protein Cleaver 🔪')
+
+    st.caption('This app digests a protein sequence into peptides using specified proteases and settings. Now ProForma2.0 compliant!')
+    st.caption('Made with [peptacular](https://pypi.org/project/peptacular/)')
 
     c1, c2 = st.columns([3, 1])
     protein_id = c1.text_input(label='Protein accession number / identifier',
@@ -86,7 +90,7 @@ with st.sidebar:
 
     raw_sequence = st.text_area(label="Protein sequence",
                                 value=raw_sequence,
-                                help='An amino acid sequence to digest',
+                                help='An amino acid sequence to digest. Any modifications will be preserved.',
                                 max_chars=MAX_PROTEIN_INPUT_LENGTH,
                                 height=200,
                                 key=st.session_state['protein_sequence_key'])
@@ -101,17 +105,22 @@ with st.sidebar:
         st.error('Please enter a protein sequence')
         st.stop()
 
-    stripped_protein_sequence = strip_modifications(protein_sequence)
-    protein_length = calculate_sequence_length(protein_sequence)
-    st.caption(f'Length: {protein_length}')
+    stripped_protein_sequence = pt.strip_mods(protein_sequence)
+    protein_length = pt.sequence_length(protein_sequence)
+
+    c1, c2 = st.columns(2)
+    c1.caption(f'Length: {protein_length}')
 
     if protein_length > MAX_PROTEIN_LEN:
         st.error(f'Protein sequence is too long. Please keep it under {MAX_PROTEIN_LEN} residues.')
         st.stop()
 
-    # check if all residues are valid
-    if not valid_mass_sequence(protein_sequence):
-        st.error('Invalid amino acid sequence. Please check your input.')
+    try:
+        protein_mass = pt.mass(protein_sequence)
+        c2.caption(f'Mass: {protein_mass:.2f} Da')
+
+    except Exception as e:
+        st.error(f'Error calculating protein mass: {e}')
         st.stop()
 
     c1, c2 = st.columns(2)
@@ -120,7 +129,7 @@ with st.sidebar:
                                         help='The proteases to use for digestion',
                                         default=query_proteases)
 
-    custom_regex = c2.text_input(label='(Additional) Custom protease',
+    custom_regex = c2.text_input(label='Protease regex',
                                  value=query_custom_regex,
                                  help='A custom regular expression to use for digestion. Will be used along with '
                                       'selected proteases. For example a regex expression for trypsin would look like: '
@@ -231,16 +240,18 @@ with st.sidebar:
                                          value=query_remove_non_proteotypic,
                                          help='Remove peptides that are not proteotypic')
 
+    mod_mode = st.radio('Modification Mode', pt.MOD_MODE_VALUES, horizontal=True, index=pt.MOD_MODE_VALUES.index(query_mod_mode))
+
     with st.expander('Static Modifications'):
 
         c1, c2 = st.columns(2)
-        n_term_static_mod = c1.number_input(label='N-term mod',
-                                            value=query_n_term_static_mod,
-                                            help='Apply a static modification to the N-terminus')
+        n_term_static_mod = c1.text_input(label='N-term mod',
+                                          value=str(query_n_term_static_mod),
+                                          help='Apply a static modification to the N-terminus')
 
-        c_term_static_mod = c2.number_input(label='C-term mod',
-                                            value=query_c_term_static_mod,
-                                            help='Apply a static modification to the C-terminus')
+        c_term_static_mod = c2.text_input(label='C-term mod',
+                                          value=str(query_c_term_static_mod),
+                                          help='Apply a static modification to the C-terminus')
 
         num_static_mods = st.number_input(label='Number of unique static modifications',
                                           min_value=MIN_STATIC_MODS,
@@ -259,18 +270,16 @@ with st.sidebar:
             mod = query_static_mods[r][1] if r < len(query_static_mods) else 0.0
 
             with grid[0]:
-                st.multiselect(label='Amino acids',
+                st.multiselect(label='Modified AAs',
                                key=f'static_mod_residue{r}',
-                               options=list(AMINO_ACIDS),
+                               options=list(pt.AMINO_ACIDS),
                                help='Select amino acids for which to apply the static modification',
                                default=aas)
             with grid[1]:
-                st.number_input(label='Modification Mass (Da)',
-                                step=0.00001,
+                st.text_input(label='Modification',
                                 key=f'static_mod_mass{r}',
-                                help='The mass of the modification (in daltons)',
-                                value=mod,
-                                format='%.5f')
+                                help='The modification',
+                                value=mod)
 
 
         # Loop to create rows of input widgets
@@ -279,19 +288,19 @@ with st.sidebar:
 
         static_mods = {}
         for r in range(num_static_mods):
-            mod = "{:.5f}".format(st.session_state[f'static_mod_mass{r}'])
+            mod = st.session_state[f'static_mod_mass{r}']
             for residue in st.session_state[f'static_mod_residue{r}']:
                 static_mods[residue] = mod
 
     with st.expander('Variable Modifications'):
 
         c1, c2 = st.columns(2)
-        n_term_var_mod = c1.number_input(label='N-term var mod',
-                                         value=query_n_term_var_mod,
-                                         help='Apply a variable modification to the N-terminus')
-        c_term_var_mod = c2.number_input(label='C-term var mod',
-                                         value=query_c_term_var_mod,
-                                         help='Apply a variable modification to the C-terminus')
+        n_term_var_mod = c1.text_input(label='N-term var mod',
+                                       value=query_n_term_var_mod,
+                                       help='Apply a variable modification to the N-terminus')
+        c_term_var_mod = c2.text_input(label='C-term var mod',
+                                       value=query_c_term_var_mod,
+                                       help='Apply a variable modification to the C-terminus')
 
         max_var_mods = st.number_input(label='Max var mods',
                                        min_value=MIN_MAX_VAR_MODS,
@@ -310,22 +319,22 @@ with st.sidebar:
         # columns to lay out the inputs
         grid = st.columns([3, 2])
 
+
         def add_variable_modification(r):
             aas = list(query_variable_mods[r][0]) if r < len(query_variable_mods) else []
             mod = query_variable_mods[r][1] if r < len(query_variable_mods) else 0.0
 
             with grid[0]:
-                st.multiselect(label='Amino acids',
+                st.multiselect(label='Modified AAs',
                                key=f'var_mod_residue{r}',
-                               options=list(AMINO_ACIDS),
+                               options=list(pt.AMINO_ACIDS),
                                help='Select amino acids for which to apply the variable modification',
                                default=aas)
             with grid[1]:
-                st.number_input(label='Modification Mass (Da)',
-                                step=0.00001, key=f'var_mod_mass{r}',
-                                help='The mass of the modification (in daltons)',
-                                value=mod,
-                                format='%.5f')
+                st.text_input(label='Modification',
+                                key=f'var_mod_mass{r}',
+                                help='Themodification',
+                                value=mod)
 
 
         # Loop to create rows of input widgets
@@ -334,7 +343,7 @@ with st.sidebar:
 
         var_mods = {}
         for r in range(num_variable_mods):
-            mod = "{:.5f}".format(st.session_state[f'var_mod_mass{r}'])
+            mod = st.session_state[f'var_mod_mass{r}']
             for residue in st.session_state[f'var_mod_residue{r}']:
                 var_mods[residue] = mod
 
@@ -342,14 +351,14 @@ with st.sidebar:
                            min_peptide_len, max_peptide_len, min_mass, max_mass, semi_enzymatic, infer_charge,
                            min_charge, max_charge, min_mz, max_mz, remove_non_proteotypic, n_term_static_mod,
                            c_term_static_mod, num_static_mods, n_term_var_mod, c_term_var_mod, max_var_mods,
-                           num_variable_mods, static_mods, var_mods)
+                           num_variable_mods, static_mods, var_mods, mod_mode)
 
 sites = set()
 for enzyme_regex in enzyme_regexes:
-    sites.update(identify_cleavage_sites(protein_sequence, enzyme_regex))
+    sites.update(pt.get_cleavage_sites(protein_sequence, enzyme_regex))
 sites = sorted(list(sites))
 
-#with st.expander('Edit Sites'):
+# with st.expander('Edit Sites'):
 #    sites = st.multiselect(label="Sites",
 #                            options=list(range(len(stripped_protein_sequence)+1)),
 #                            help='The proteases to use for digestion',
@@ -359,7 +368,7 @@ sites = sorted(list(sites))
 df = generate_peptide_df(protein_sequence, sites, missed_cleavages, min_peptide_len, max_peptide_len,
                          semi_enzymatic, static_mods, min_mass, max_mass, is_mono, infer_charge, min_charge,
                          max_charge, min_mz, max_mz, var_mods, max_var_mods, n_term_static_mod, c_term_static_mod,
-                         n_term_var_mod, c_term_var_mod, remove_non_proteotypic)
+                         n_term_var_mod, c_term_var_mod, remove_non_proteotypic, mod_mode)
 
 # Start the HTML string for the site indexes
 site_indexes_html = '<span style="font-family: Courier New, monospace; font-size: 16px;">'
@@ -387,7 +396,7 @@ sequence_with_sites += '</span>'
 cmap = mpl.colormaps.get_cmap(CMAP)
 
 spans = [(s, e, mc) for s, e, mc in df[['Start', 'End', 'MC']].values]
-protein_cov_arr = calculate_span_coverage(spans, protein_length, accumulate=True)
+protein_cov_arr = pt.calculate_span_coverage(spans, protein_length, accumulate=True)
 protein_coverage = coverage_string(protein_cov_arr, stripped_protein_sequence, cmap)
 
 # calculate protein coverage at different MC
@@ -396,7 +405,7 @@ mcs = [mc for mc in range(0, missed_cleavages + 1)]
 for mc in mcs:
     df_mc = df[df['MC'] <= mc]
     spans = [(s, e, mc) for s, e, mc in df_mc[['Start', 'End', 'MC']].values]
-    cov = calculate_span_coverage(spans, protein_length)
+    cov = pt.calculate_span_coverage(spans, protein_length)
     protein_cov_at_mcs.append(sum(cov) / len(cov) * 100)
 
 # calculate protein coverage at different peptide lengths
@@ -405,7 +414,7 @@ lens = [l for l in range(min_peptide_len, max_peptide_len + 1)]
 for l in lens:
     df_len = df[df['Len'] <= l]
     spans = [(s, e, mc) for s, e, mc in df_len[['Start', 'End', 'MC']].values]
-    cov = calculate_span_coverage(spans, protein_length)
+    cov = pt.calculate_span_coverage(spans, protein_length)
     protein_cov_at_lens.append(sum(cov) / len(cov) * 100)
 
 # calculate protein coverage at different peptide Mass
@@ -414,7 +423,7 @@ masses = [m for m in range(int(min_mass), int(max_mass) + 1, 100)]
 for m in masses:
     df_mass = df[df['NeutralMass'] <= m]
     spans = [(s, e, mc) for s, e, mc in df_mass[['Start', 'End', 'MC']].values]
-    cov = calculate_span_coverage(spans, protein_length)
+    cov = pt.calculate_span_coverage(spans, protein_length)
     protein_cov_at_mass.append(sum(cov) / len(cov) * 100)
 
 st.write(f'##### [Analysis URL]({url}) (copy me and send to your friends!)')
@@ -443,14 +452,13 @@ with t1:
         use_container_width=True
     )
 
-
 with t2:
     st.header('Cleavage & Coverage')
 
     c1, c2 = st.columns(2)
     c1.metric('Cleavage Sites', len(sites))
 
-    protein_cov_arr_bin = calculate_span_coverage(spans, protein_length, accumulate=False)
+    protein_cov_arr_bin = pt.calculate_span_coverage(spans, protein_length, accumulate=False)
     protein_cov_perc = round(sum(protein_cov_arr_bin) / len(protein_cov_arr_bin) * 100, 2)
     c2.metric('Protein Coverage', f'{protein_cov_perc}%')
 
@@ -485,15 +493,20 @@ with t3:
     motif_regex = c1.text_input('Motifs Regex', '(K)')
 
     st.cache_data()
+
+
     def get_motif_sites(motif_regex, stripped_protein_sequence):
         motif_sites = list(reg.finditer(motif_regex, stripped_protein_sequence, overlapped=True))
         return motif_sites
 
+
     if motif_regex:
         motif_sites = get_motif_sites(motif_regex, stripped_protein_sequence)
 
+
         def count_motifs(row):
             return sum([1 for site in motif_sites if row['Start'] <= site.start() < row['End']])
+
 
         df['Motifs'] = df.apply(count_motifs, axis=1)
         motif_cov_indexes = {i for site in motif_sites for i in range(site.start(), site.end())}
@@ -513,7 +526,6 @@ with t3:
                             motif_cov_array[i] = row[2]
                         else:
                             motif_cov_array[i] = min(row[2], motif_cov_array[i])
-
 
         min_moitifs = c2.number_input('Min Motifs', min_value=0, max_value=max(df['Motifs']), value=0)
         max_motifs = c3.number_input('Max Motifs', min_value=0, max_value=max(df['Motifs']), value=max(df['Motifs']))
@@ -535,7 +547,6 @@ with t3:
 
         counter = Counter(df['Motifs'])
 
-
         st.subheader('Motif Site Coverage', help='The color corresponds to the peptide with the fewest number of motif '
                                                  'matches (excluding 0 matches). Example: Lets assume that the first '
                                                  'site is covered by two peptides, the first with one match and the '
@@ -548,9 +559,9 @@ with t3:
             for i, (k, v) in enumerate(sorted(counter.items())):
                 df_tmp = df[df['Motifs'] == k]
                 tmp_spans = [(s, e, mc) for s, e, mc in df_tmp[['Start', 'End', 'MC']].values]
-                cov = calculate_span_coverage(tmp_spans, protein_length, accumulate=True)
+                cov = pt.calculate_span_coverage(tmp_spans, protein_length, accumulate=True)
 
-                cov_bin = calculate_span_coverage(tmp_spans, protein_length, accumulate=False)
+                cov_bin = pt.calculate_span_coverage(tmp_spans, protein_length, accumulate=False)
 
                 c1, c2 = st.columns(2)
                 c1.metric(f'Protein Coverage with {k} motif matches', f'{round(sum(cov_bin) / len(cov_bin) * 100, 2)}%')
@@ -631,4 +642,3 @@ with t5:
 
         st.subheader('Example Code')
         st.code(MODEL_CODE)
-

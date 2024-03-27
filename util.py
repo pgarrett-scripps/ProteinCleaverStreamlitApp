@@ -5,21 +5,23 @@ from typing import List
 import numpy as np
 import pandas as pd
 import requests
-from peptacular.mass import calculate_mass
-from peptacular.sequence import span_to_sequence, calculate_sequence_length, apply_static_modifications, \
-    strip_modifications, apply_variable_modifications
-from peptacular.spans import build_enzymatic_spans, build_semi_spans
+import peptacular as pt
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib as mpl
-from peptacular.term.modification import add_n_term_modification, add_c_term_modification
+from peptacular import InvalidModificationMassError
+import streamlit as st
 
 from constants import LINK, BASE_URL
 
 
 def fetch_sequence_from_uniprot(accession_number):
-    url = f"https://www.uniprot.org/uniprot/{accession_number}.fasta"
-    response = requests.get(url)
+    url = f"http://www.uniprot.org/uniprot/{accession_number}.fasta"
+    try:
+        response = requests.get(url)
+    except Exception as e:
+        st.error(e)
+        st.stop()
     return response
 
 
@@ -28,17 +30,26 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
                         is_mono: bool, infer_charge: bool, min_charge: int, max_charge: int, min_mz: float,
                         max_mz: float, var_mods: dict, max_var_mods: int, n_term_static_mod: float,
                         c_term_static_mod: float, n_term_var_mod: float, c_term_var_mod: float,
-                        remove_non_proteotypic: bool):
+                        remove_non_proteotypic: bool, mod_mode: str):
+
+    n_term_static_mod = [n_term_static_mod] if n_term_static_mod else []
+    c_term_static_mod = [c_term_static_mod] if c_term_static_mod else []
+    n_term_var_mod = [n_term_var_mod] if n_term_var_mod else []
+    c_term_var_mod = [c_term_var_mod] if c_term_var_mod else []
+
+    var_mods = {k: [v] for k, v in var_mods.items()}
+    static_mods = {k: [v] for k, v in static_mods.items()}
+
     cleavage_sites = sorted(cleavage_sites)
-    spans = build_enzymatic_spans(calculate_sequence_length(sequence), cleavage_sites, missed_cleavages, 1, None)
+    spans = pt.build_enzymatic_spans(pt.sequence_length(sequence), cleavage_sites, missed_cleavages, 1, None)
     df = pd.DataFrame(spans, columns=['Start', 'End', 'MC'])
-    df['Sequence'] = [span_to_sequence(sequence, span) for span in spans]
+    df['Sequence'] = [pt.span_to_sequence(sequence, span) for span in spans]
     df['Semi'] = 0
 
     if semi_enzymatic is True:
-        semi_spans = build_semi_spans(spans, min_len, max_len)
+        semi_spans = pt.build_semi_spans(spans, min_len, max_len)
         semi_df = pd.DataFrame(semi_spans, columns=['Start', 'End', 'MC'])
-        semi_df['Sequence'] = [span_to_sequence(sequence, span) for span in semi_spans]
+        semi_df['Sequence'] = [pt.span_to_sequence(sequence, span) for span in semi_spans]
         semi_df['Semi'] = 1
         df = pd.concat([df, semi_df], ignore_index=True)
 
@@ -55,29 +66,14 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
     # Apply variable modifications to each sequence in the DataFrame
     def apply_var_mods(sequence: str) -> str:
 
-        var_seqs = apply_variable_modifications(sequence, var_mods, max_var_mods)
+        var_seqs = pt.apply_variable_mods(sequence=sequence,
+                                          internal_mods=var_mods,
+                                          max_mods=max_var_mods,
+                                          nterm_mods=n_term_var_mod,
+                                          cterm_mods=c_term_var_mod,
+                                          mode=mod_mode)
 
-        if n_term_var_mod and c_term_var_mod:
-            n_term_seq = add_n_term_modification(sequence, n_term_var_mod)
-            c_term_seq = add_c_term_modification(sequence, c_term_var_mod)
-            n_c_term_seq = add_c_term_modification(n_term_seq, c_term_var_mod)
-
-            n_term_seqs = apply_variable_modifications(n_term_seq, var_mods, max_var_mods)
-            c_term_seqs = apply_variable_modifications(c_term_seq, var_mods, max_var_mods)
-            n_c_term_seqs = apply_variable_modifications(n_c_term_seq, var_mods, max_var_mods)
-
-            return ';'.join(list(set(var_seqs + n_term_seqs + c_term_seqs + n_c_term_seqs)))
-
-        elif n_term_var_mod:
-            n_term_seq = add_n_term_modification(sequence, n_term_var_mod)
-            n_term_seqs = apply_variable_modifications(n_term_seq, var_mods, max_var_mods)
-            return ';'.join(list(set(var_seqs + n_term_seqs)))
-        elif c_term_var_mod:
-            c_term_seq = add_c_term_modification(sequence, c_term_var_mod)
-            c_term_seqs = apply_variable_modifications(c_term_seq, var_mods, max_var_mods)
-            return ';'.join(list(set(var_seqs + c_term_seqs)))
-        else:
-            return ';'.join(var_seqs)
+        return ';'.join(var_seqs)
 
     # Apply the apply_var_mods function to the 'Sequence' column
     df['Sequence'] = df['Sequence'].apply(apply_var_mods)
@@ -86,24 +82,27 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
     df = df.assign(Sequence=df.Sequence.str.split(';')).explode('Sequence')
 
     def apply_static_mods(sequence: str) -> str:
-
-        sequence = apply_static_modifications(sequence, static_mods)
-
-        if n_term_static_mod:
-            sequence = add_n_term_modification(sequence, n_term_static_mod)
-
-        if c_term_static_mod:
-            sequence = add_c_term_modification(sequence, c_term_static_mod)
-
+        sequence = pt.apply_static_mods(sequence=sequence,
+                                        internal_mods=static_mods,
+                                        nterm_mods=n_term_static_mod,
+                                        cterm_mods=c_term_static_mod,
+                                        mode=mod_mode)
         return sequence
 
     df['Sequence'] = df['Sequence'].apply(apply_static_mods)
 
     # drop duplicates
 
-    df['NeutralMass'] = [round(calculate_mass(sequence, monoisotopic=is_mono), 5) for sequence in df['Sequence']]
+    def calc_mass(sequence: str, monoisotopic: bool, precision: int) -> float:
+        try:
+            return pt.mass(sequence, monoisotopic=monoisotopic, precision=precision, ion_type='p')
+        except InvalidModificationMassError as e:
+            st.error(e)
+            st.stop()
+
+    df['NeutralMass'] = df['Sequence'].apply(calc_mass, monoisotopic=is_mono, precision=5)
     df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
-    df['StrippedPeptide'] = df['Sequence'].apply(strip_modifications)
+    df['StrippedPeptide'] = df['Sequence'].apply(pt.strip_mods)
 
     df.sort_values(by=['MC'], inplace=True)
     df.drop_duplicates(subset=['Start', 'Sequence'], inplace=True)
@@ -120,18 +119,18 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
         return df
 
     rt_model = pickle.load(open("rt_model.pkl", "rb"))
-    df['RT'] = rt_model.predict(np.array([bin_aa_counts(strip_modifications(seq)) for seq in df['Sequence']]))
+    df['RT'] = rt_model.predict(np.array([bin_aa_counts(pt.strip_mods(seq)) for seq in df['Sequence']]))
     df['RT'] = df['RT'].round(3)
 
     if infer_charge:
         im_model = pickle.load(open("im_model.pkl", "rb"))
         df['IM'] = im_model.predict(
-            np.array([bin_aa_counts(strip_modifications(seq), c) for seq, c in df[['Sequence', 'Charge']].values]))
+            np.array([bin_aa_counts(pt.strip_mods(seq), c) for seq, c in df[['Sequence', 'Charge']].values]))
         df['IM'] = df['IM'].round(3)
 
     proteotypic_model = pickle.load(open("proteotypic_model.pkl", "rb"))
     df['Proteotypic'] = proteotypic_model.predict(
-        np.array([bin_aa_counts(strip_modifications(seq)) for seq in df['Sequence']])).astype(bool)
+        np.array([bin_aa_counts(pt.strip_mods(seq)) for seq in df['Sequence']])).astype(bool)
 
     if remove_non_proteotypic:
         df = df[df['Proteotypic']]
@@ -197,7 +196,7 @@ def generate_app_url(protein_id, protein_sequence, proteases, custom_regex, miss
                      min_peptide_len, max_peptide_len, min_mass, max_mass, semi_enzymatic, infer_charge,
                      min_charge, max_charge, min_mz, max_mz, remove_non_proteotypic, n_term_static_mod,
                      c_term_static_mod, num_static_mods, n_term_var_mod, c_term_var_mod, max_var_mods,
-                     num_variable_mods, static_mods, variable_mods):
+                     num_variable_mods, static_mods, variable_mods, mod_mode):
 
     # flip the dictionary
     static_mods_rev = {}
@@ -236,7 +235,8 @@ def generate_app_url(protein_id, protein_sequence, proteases, custom_regex, miss
         'max_var_mods': max_var_mods,
         'num_variable_mods': num_variable_mods,
         'static_mods': static_mod_str,
-        'variable_mods': variable_mod_str
+        'variable_mods': variable_mod_str,
+        'mod_mode': mod_mode
     }
     query_string = '&'.join([f'{key}={value}' for key, value in params.items() if value is not None])
     return f'{BASE_URL}?{query_string}'

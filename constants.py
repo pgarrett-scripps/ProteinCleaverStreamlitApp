@@ -82,3 +82,4 @@ VALID_PROTEASES.pop('non-specific', None)
 VALID_PROTEASES = {k.replace(' ', '_'): v for k, v in VALID_PROTEASES.items()}
 
 BASE_URL = get_env_str('BASE_URL', 'http://localhost:8501')
+

@@ -18,7 +18,9 @@ acid sequence. This is typically facilitated by the protease's active site, whic
 conducive to binding the target protein.
 
 
-For example, trypsin binds after Lysine (K) or Arginine (R). Let's use the first Arginine (R) in the following protein 
+For example, trypsin cleaves after (on the C terminal side of) Lysine (K) or Arginine (R). Let's use the first Arginine
+ (R) in the following protein.
+ 
 as an example:
 ```
 Protein:       H-W-P-R-A-T-G-A-K-Y-G-G-L
@@ -119,15 +121,31 @@ N-terminal acetylation.
 
 ## Average vs. Monoisotopic Mass  
 
-In the context of mass spectrometry and proteomics, two important concepts related to the mass of atoms, ions, 
-molecules, or compounds are average mass and monoisotopic mass.  
+In the context of mass spectrometry and proteomics,there are two methodologies for calculating the mass of analytes: 
+Monoisotopic and Average.  
 
 ### Average Mass  
 
 The average mass, also known as the molecular weight or the molecular mass, is the weighted average of the masses of 
 all isotopes of an element, taking into account their natural abundance. For instance, carbon (C) has two naturally 
 occurring isotopes: C-12 and C-13. The average mass of carbon takes into account the masses and abundances of these 
-two isotopes.  
+two isotopes.  Average mass is calculated as follows:
+
+```
+Isotope = 12C
+Relative Atomic Mass = 12.0000000(00)
+Isotopic Composition = 0.9893(8)
+```
+
+```
+Isotope = 13C
+Relative Atomic Mass = 13.00335483507(23)
+Isotopic Composition = 0.0107(8)
+```
+
+```
+Average Mass = (12.0 * 0.99) + (13.0 * 0.01) = 12.01 Da
+```
 
 Similarly, when calculating the average mass of a peptide or a protein, the average masses of all the individual amino 
 acids (which again, take into account the different isotopes of all the atoms in the amino acid) are summed.  
