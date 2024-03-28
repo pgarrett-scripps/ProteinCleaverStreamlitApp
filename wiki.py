@@ -1,172 +1,68 @@
 PROTEASE_WIKI = """  
-## Protein Cleavage:  
+## Protein Cleavage:
 
-Protein cleavage is the process by which proteins are broken down into smaller peptides. This occurs through hydrolysis 
-of the amide bonds linking amino acids, which is typically catalyzed by an protease.  
+Protein cleavage is the biochemical process of breaking proteins down into smaller peptide fragments. This is achieved through the hydrolysis of peptide bonds, which are the chemical links between amino acids. Typically, this process is facilitated by enzymes known as proteases, which expedite the cleavage of these bonds.
 
-## Protease:  
+## Protease:
 
-A protease is an enzyme that catalyzes proteolysis and begins the protein cleavage process by breaking down the 
-peptide bonds. Different proteases have different 'cleavage specificity', which means they recognize and cleave at 
-specific sequences or types of amino acids.  
+A protease is a type of enzyme specifically designed to carry out proteolysis, initiating the breakdown of proteins by cleaving their peptide bonds. Each protease is characterized by its 'cleavage specificity,' a unique ability to identify and cut at particular amino acids or specific sequences of amino acids. This specificity allows for targeted cleavage, influencing the size and sequence of the resulting peptide fragments.
 
-### How does a Protease work?  
+For example Trypsin, the most widely used protease, cleaves after (at the C-Terminus of) Arginine (R) and Lysine (K).
 
-#### 1 - Recognition/Binding:   
-In the first step in the protein cleavage process the protease recognizes and binds to a specific amino acid or amino 
-acid sequence. This is typically facilitated by the protease's active site, which has a shape and chemical environment 
-conducive to binding the target protein.
+![enter image description here](https://www.bocsci.com/upload/image/trypsin-cleavage-of-peptides.jpg)
+  
+## Missed Cleavages   
 
+A missed cleavage refers to an instance where a protease does not cut a protein at a spot where it typically should. This oversight can happen for several reasons, including steric hindrance, modifications on the amino acids meant to be cut, or conditions that aren't ideal for the reaction. Steric hindrance, for example, can arise from the protein's complex folding patterns (its secondary, tertiary, or quaternary structures), which might block the protease's access to the intended cleavage site. Furthermore, post-translational modifications—chemical changes to the protein after it's made—near the cleavage site can alter how effectively the protease works. Other important factors affecting the occurrence of missed cleavages include the reaction's pH level, temperature, and the concentration of ions present.
 
-For example, trypsin cleaves after (on the C terminal side of) Lysine (K) or Arginine (R). Let's use the first Arginine
- (R) in the following protein.
+![enter image description here](https://cores.imp.ac.at/fileadmin/additional_pages/core_facilities/protein_chemistry/pix/faq/missed_cleavage1.jpg)
+
+## Semi-Enzymatic Peptides   
+
+Semi-enzymatic peptides result from the enzymatic digestion of proteins where the peptides are cleaved by the protease at only one end. In an ideal digestion process, each peptide generated would exhibit cleavage at both the C-terminus and N-terminus, aside from the first and last peptides in the sequence, which naturally have one end unaltered by the enzyme. Semi-enzymatic peptides deviate from this ideal, showcasing only one end cleaved in alignment with the expected enzymatic action.
  
-as an example:
-```
-Protein:       H-W-P-R-A-T-G-A-K-Y-G-G-L
-                     ^
-                     |
-Protease (Trypsin): -R-
-```
+## Static Modifications
 
-#### 2 - Cleavage:   
-Once the protease has bound to the target sequence, it catalyzes a hydrolysis reaction, breaking the peptide bond 
-between two specific amino acids. This results in the protein being cleaved into smaller peptides or individual amino 
-acids.  
+A static modification (also referred to as a fixed modification) is a post-translational modification (PTM) which is  
+expected to occur at every instance of the specified residue(s). For example, one of the most common static modifications is the carbamidomethylation of cysteine residues. 
 
+## Variable Modifications   
+
+Contrastingly, variable modifications are those that may or may not occur at every possible site, and these are handled differently in data analysis. Common examples of variable modifications include methionine oxidation and protein N-terminal acetylation.   
+
+## Average vs. Monoisotopic Mass   
+
+
+  
+
+  
+In mass spectrometry, analyte mass can be calculated using two principal methods: monoisotopic mass and average mass. The selection between monoisotopic and average mass depends on the mass spectrometer's resolution. Lower-resolution spectrometers struggle to differentiate between isotopic peaks, leading to the reporting of a peak that represents the average mass of all isotopes of an element present in the molecule. Conversely, high-resolution spectrometers can distinguish individual isotopes, allowing for the precise determination of monoisotopic mass.
+
+### Average Mass   
+
+The average mass, also known as the molecular weight or the molecular mass, is the weighted average of the masses of all isotopes of an element, taking into account their natural abundance. For instance, carbon (C) has two naturally occurring isotopes: C-12 and C-13. The average mass of carbon takes into account the masses and abundances of these two isotopes.  
+
+Average mass is calculated as follows:  
+  
 ```  
-Peptide 1: H-W-P-R  
-Peptide 2: A-T-G-A-K-Y-G-G-L  
+Isotope = 12C  
+Relative Atomic Mass = 12.0000000(00)  
+Isotopic Composition = 0.9893(8)  
 ```  
-
-#### 3 - Release:   
-After the cleavage has occurred, the smaller peptide sequences are released from the active site, and the protease 
-can then go on to catalyze another reaction.  
-
-
-## Missed Cleavages  
-
-A missed cleavage occurs when a protease fails to cleave a protein at a location where it typically would. 
-
-Missed cleavages can occur for various reasons such as steric hindrance, modifications on the target residues, or 
-suboptimal reaction conditions. Steric hindrance might be caused by the protein's secondary, tertiary, or quaternary 
-structures which can prevent the protease from accessing the cleavage site. Post-translational modifications  
-on or around the target residues can also influence cleavage efficiency. Additional factors such as pH, temperature, 
-and ionic strength of the reaction can also contribute to missed cleavages.
-
-Missed cleavages are of particular importance in proteomics because they increase the complexity of peptide 
-mixtures, thus making protein identification and quantification more challenging.
-
-### Example  
-
-Consider the protein sequence,  **H-W-K-A-T-K-G-A-L-Y-G-G-L. Digestion** with trypsin, would be expected to yield 
-four peptides:
-
-A perfect cleavage scenario would yield four peptides:  
-
+  
 ```  
-H-W-K  
-A-T-K  
-G-A-L-Y-G-G-L  
+Isotope = 13C  
+Relative Atomic Mass = 13.00335483507(23)  
+Isotopic Composition = 0.0107(8)  
 ```  
-
-But if the first cleavage site is missed, we would end up with a different set of peptides, with one larger peptide 
-instead of two smaller ones. 
-
+  
 ```  
-H-W-K-A-T-K 
-G-A-L-Y-G-G-L  
+Average Mass = (12.0 * 0.99) + (13.0 * 0.01) = 12.01 Da  
 ```  
+ 
+### Monoisotopic Mass   
 
-## Semi-Enzymatic Peptides  
-
-Semi-enzymatic peptides are peptides produced during enzymatic digestion of proteins that have only one cleavage site 
-consistent with the specificity of the protease used.  
-
-During protein digestion, proteases cleave the protein at specific residues or sequences. In a perfect digestion 
-scenario, every peptide resulting from this process would have a cleavage site at both the C-terminus and N-terminus 
-(with the exception of the first and last peptides in the sequence, which naturally only have one enzymatic terminus).  
-
-### Example  
-
-Consider digestion of the following protein sequence by trypsin: **T-V-K-A-T-R-G-L-I-M**. 
-
-A fully enzymatic digestion would produce these peptides:   
-```  
-T-V-K  
-A-T-R  
-G-L-I-M  
-```  
-
-However, if a cleavage at the second K is missed and the protease cleaves after M instead, a semi-enzymatic peptide 
-is produced: **T-V-K-A-T-R-G-L-I-M**.  
-
-In this semi-enzymatic peptide, the trypsin cleavage site (K) is present only at the N-terminus. The C-terminus ends 
-with a methionine, which is not a typical trypsin cleavage site.  
-
-## Static Modifications  
-
-A static modification (also referred to as a fixed modification) is a post-translational modification (PTM) which is
-expected to occur at every instance of the specified residue(s).
-
-For example, one of the most common static modifications is the carbamidomethylation of cysteine residues. In this 
-modification, iodoacetamide or iodoacetic acid reacts with the sulfhydryl group on the cysteine residue to form a 
-carbamidomethyl group. The mass of the cysteine residue is thus increased by 57.021464 Daltons (Da).  
-
-## Variable Modifications 
-
-Contrastingly, variable modifications are those that may or may not occur at every possible site, and these are handled 
-differently in data analysis. Common examples of variable modifications include methionine oxidation and protein 
-N-terminal acetylation.  
-
-## Average vs. Monoisotopic Mass  
-
-In the context of mass spectrometry and proteomics,there are two methodologies for calculating the mass of analytes: 
-Monoisotopic and Average.  
-
-### Average Mass  
-
-The average mass, also known as the molecular weight or the molecular mass, is the weighted average of the masses of 
-all isotopes of an element, taking into account their natural abundance. For instance, carbon (C) has two naturally 
-occurring isotopes: C-12 and C-13. The average mass of carbon takes into account the masses and abundances of these 
-two isotopes.  Average mass is calculated as follows:
-
-```
-Isotope = 12C
-Relative Atomic Mass = 12.0000000(00)
-Isotopic Composition = 0.9893(8)
-```
-
-```
-Isotope = 13C
-Relative Atomic Mass = 13.00335483507(23)
-Isotopic Composition = 0.0107(8)
-```
-
-```
-Average Mass = (12.0 * 0.99) + (13.0 * 0.01) = 12.01 Da
-```
-
-Similarly, when calculating the average mass of a peptide or a protein, the average masses of all the individual amino 
-acids (which again, take into account the different isotopes of all the atoms in the amino acid) are summed.  
-
-### Monoisotopic Mass  
-
-Monoisotopic mass is the mass of a molecule, ion, or compound calculated using the mass of the most abundant isotope of 
-each element. For carbon, this would be C-12, which has a mass of exactly 12 Da. So, for a peptide or protein, the 
-monoisotopic mass would be calculated by summing the monoisotopic masses of all the individual amino acids.
-
-### Considerations in Proteomics  
-
-The choice between using average mass and monoisotopic mass in a proteomics study depends on the type of mass 
-spectrometer and the subsequent data analysis used. Lower resolution mass spectrometers often report average masses, 
-whereas higher resolution instruments can discern individual isotopes and thus report monoisotopic masses. Data analysis 
-algorithms must use the same type of mass that the instrument reports for accurate identification of peptides and 
-proteins.  
-
-Typically, monoisotopic mass is preferred in proteomics as it provides a more exact mass measurement, which can improve 
-the accuracy of peptide and protein identifications. However, in some cases, such as with larger proteins or lower 
-resolution instruments, it may be more appropriate to use average mass.
+Monoisotopic mass is the mass of a molecule, ion, or compound calculated using the mass of the most abundant isotope of each element. For carbon, this would be C-12, which has a mass of exactly 12 Da. So, for a peptide or protein, the monoisotopic mass would be calculated by summing the monoisotopic masses of all the individual amino acids.  
 """
 
 HELP ="""
