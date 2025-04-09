@@ -6,8 +6,13 @@ import peptacular as pt
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib as mpl
+from urllib.parse import quote_plus
+import requests
 
 from constants import LINK
+from input_options import InputOptions
+import pickle
+import numpy as np
 
 def make_clickable(sequence, mass_type):
     # target _blank to open new window
@@ -16,20 +21,21 @@ def make_clickable(sequence, mass_type):
     return link
 
 
-def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: int, min_len: int,
-                        max_len: int, semi_enzymatic: bool, static_mods: dict, min_mass: float, max_mass: float,
-                        is_mono: bool, infer_charge: bool, min_charge: int, max_charge: int, min_mz: float,
-                        max_mz: float, plus_minus_charge: int) -> pd.DataFrame:
-    cleavage_sites = sorted(cleavage_sites)
-    spans = list(pt.build_enzymatic_spans(pt.sequence_length(sequence), cleavage_sites, missed_cleavages, 1, None))
+def generate_peptide_df(options: InputOptions) -> pd.DataFrame:
+    spans = list(pt.build_enzymatic_spans(max_index=options.sequence_length, 
+                                          enzyme_sites=options.cleavage_sites, 
+                                          missed_cleavages=options.missed_cleavages, 
+                                          min_len=1, 
+                                          max_len=None))
+    
     df = pd.DataFrame(spans, columns=['Start', 'End', 'MC'])
-    df['Sequence'] = [pt.span_to_sequence(sequence, span) for span in spans]
+    df['Sequence'] = [pt.span_to_sequence(options.protein_annotation, span) for span in spans]
     df['Semi'] = 0
 
-    if semi_enzymatic is True:
-        semi_spans = list(pt.build_semi_spans(spans, min_len, max_len))
+    if options.semi_enzymatic is True:
+        semi_spans = list(pt.build_semi_spans(spans, options.min_len, options.max_len))
         semi_df = pd.DataFrame(semi_spans, columns=['Start', 'End', 'MC'])
-        semi_df['Sequence'] = [pt.span_to_sequence(sequence, span) for span in semi_spans]
+        semi_df['Sequence'] = [pt.span_to_sequence(options.protein_annotation, span) for span in semi_spans]
         semi_df['Semi'] = 1
         df = pd.concat([df, semi_df], ignore_index=True)
 
@@ -41,27 +47,60 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
 
     df.drop_duplicates(inplace=True)
 
-    df = df[(df['Len'] >= min_len) & (df['Len'] <= max_len)]
+    df = df[(df['Len'] >= options.min_len) & (df['Len'] <= options.max_len)]
 
-    df['Sequence'] = df['Sequence'].apply(lambda x: pt.apply_static_mods(x, static_mods))
+    df['Sequence'] = df['Sequence'].apply(lambda x: pt.apply_static_mods(x, options.static_modifications))
 
-    df['NeutralMass'] = [round(pt.mass(sequence, monoisotopic=is_mono), 5) for sequence in df['Sequence']]
-    df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
+    df['NeutralMass'] = [round(pt.mass(sequence, monoisotopic=options.is_monoisotopic), 5) for sequence in df['Sequence']]
+    df = df[(df['NeutralMass'] >= options.min_mass) & (df['NeutralMass'] <= options.max_mass)]
     df['StrippedPeptide'] = df['Sequence'].apply(pt.strip_mods)
 
-    if infer_charge is True:
+    if options.infer_charge is True:
         # charge should be the Lysine and Arginine count + 1
         df['base_charge'] = df['StrippedPeptide'].apply(lambda x: x.count('K') + x.count('R') + 1)
-        df['Charge'] = df['base_charge'].apply(lambda c: [i for i in range(c-plus_minus_charge, c+plus_minus_charge + 1)])
+        df['Charge'] = df['base_charge'].apply(lambda c: [i for i in range(c-options.plus_minus_charge, c+options.plus_minus_charge + 1)])
         df = df.explode('Charge')
         df['Charge'] = df['Charge'].astype(int)
 
         df['Mz'] = (df['NeutralMass'] + df['Charge'] * pt.PROTON_MASS) / df['Charge']
-        df = df[(df['Charge'] >= min_charge) & (df['Charge'] <= max_charge)]
-        df = df[(df['Mz'] >= min_mz) & (df['Mz'] <= max_mz)]
+        df = df[(df['Charge'] >= options.min_charge) & (df['Charge'] <= options.max_charge)]
+        df = df[(df['Mz'] >= options.min_mz) & (df['Mz'] <= options.max_mz)]
 
         #drop base_charge
         df.drop(columns=['base_charge'], inplace=True)
+
+
+    if options.infer_retention_time:
+        rt_model = pickle.load(open("rt_model.pkl", "rb"))
+        df['RT'] = rt_model.predict(np.array([bin_aa_counts(pt.strip_mods(seq)) for seq in df['Sequence']]))
+        df['RT'] = df['RT'].round(3)
+
+        #scale to retention time
+        df['RT'] = df['RT'] * options.retention_time 
+
+        if options.filter_invalid_rt:
+            df = df[df['RT'] <= options.retention_time]
+            # greater than 0
+            df = df[df['RT'] > 0]
+
+    if 'Charge' in df.columns:
+        im_model = pickle.load(open("im_model.pkl", "rb"))
+        df['IM'] = im_model.predict(
+            np.array([bin_aa_counts(pt.strip_mods(seq), c) for seq, c in df[['Sequence', 'Charge']].values]))
+        df['IM'] = df['IM'].round(3)
+
+    if options.infer_proteotypic:
+        proteotypic_model = pickle.load(open("proteotypic_model.pkl", "rb"))
+
+        probs = proteotypic_model.predict_proba(
+            np.array([bin_aa_counts(pt.strip_mods(seq)) for seq in df['Sequence']]))
+        
+        df['score'] = probs[:, 1]
+        df['Proteotypic'] = probs[:, 1] >= options.score_threshold
+
+        if options.remove_non_proteotypic:
+            df = df[df['Proteotypic']]
+
 
     return df
 
@@ -117,3 +156,78 @@ def create_colorbar(max_coverage, cmap, label='Coverage'):
 
     # Display the colorbar in Streamlit
     return fig
+
+
+def listify(o=None):
+    if o is None:
+        res = []
+    elif isinstance(o, list):
+        res = o
+    elif isinstance(o, str):
+        res = [o]
+    else:
+        res = [o]
+    return res
+
+
+def shorten_url(url: str) -> str:
+    """Shorten a URL using TinyURL."""
+    api_url = f"http://tinyurl.com/api-create.php?url={url}"
+
+    try:
+        response = requests.get(api_url)
+        response.raise_for_status()
+        return response.text
+    except requests.RequestException as e:
+        return f"Error: {e}"
+
+
+def get_query_params_url(params_dict):
+    """
+    Create url params from alist of parameters and a dictionary with values.
+
+    Args:
+        params_list (str) :
+            A list of parameters to get the value of from `params_dict`
+        parmas_dict (dict) :
+            A dict with values for the `parmas_list .
+        **kwargs :
+            Extra keyword args to add to the url
+    """
+    return "?" + "&".join(
+        [
+            f"{key}={quote_plus(str(value))}"
+            for key, values in params_dict.items()
+            for value in listify(values)
+        ]
+    )
+
+
+def get_site_index_html(input_options):
+    site_indexes_html = '<span style="font-family: Courier New, monospace; font-size: 16px;">'
+    for cleavage_site in input_options.cleavage_sites:
+        site_indexes_html += f'<span style="background-color:#f0f0f0; font-weight:900; color:red; padding:2px; ' \
+                            f'margin:1px; border:1px solid #ffcc00; border-radius:3px;">{cleavage_site}</span>'
+        site_indexes_html += ' '
+    site_indexes_html += '</span>'
+    return site_indexes_html
+
+def get_sequence_site_html(input_options):
+
+    sequence_with_sites = '<span style="font-family: Courier New, monospace; font-size: 16px;">'
+    for i, aa in enumerate(input_options.stripped_protein_sequence):
+        # Add the amino acid with its original index
+        sequence_with_sites += f'<span title="Index: {i + 1}" style="background-color:#f0f0f0; font-weight:900; ' \
+                            f'color:#333; padding:2px; margin:1px; border:1px solid #cccccc; ' \
+                            f'border-radius:3px;">{aa}</span>'
+
+        # Check if the next position is a cleavage site and insert '%' character
+        if i + 1 in input_options.cleavage_sites:
+            # Highlight '%' character in blue
+            sequence_with_sites += f'<span style="background-color:#e0e0ff; font-weight:900; color:red; font-weight:bold;' \
+                                f' padding:2px; margin:1px; border:1px solid #a0a0ff; border-radius:3px;">%</span>'
+    sequence_with_sites += '</span>'
+
+    return sequence_with_sites
+
+
