@@ -2,10 +2,7 @@ from collections import Counter
 from typing import List
 
 import pandas as pd
-from peptacular.mass import calculate_mass
-from peptacular.sequence import span_to_sequence, calculate_sequence_length, apply_static_modifications, \
-    strip_modifications
-from peptacular.spans import build_enzymatic_spans, build_semi_spans
+import peptacular as pt
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib as mpl
@@ -15,24 +12,24 @@ from constants import LINK
 def make_clickable(sequence, mass_type):
     # target _blank to open new window
     # extract clickable text to display for your link
-    link = LINK + f'?sequence={sequence}&mass_type={mass_type}'
-    return f'<a target="_blank" href="{link}">{sequence}</a>'
+    link = LINK + f'?peptide={sequence}&mass_type={mass_type}'
+    return link
 
 
 def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: int, min_len: int,
                         max_len: int, semi_enzymatic: bool, static_mods: dict, min_mass: float, max_mass: float,
                         is_mono: bool, infer_charge: bool, min_charge: int, max_charge: int, min_mz: float,
-                        max_mz: float):
+                        max_mz: float, plus_minus_charge: int) -> pd.DataFrame:
     cleavage_sites = sorted(cleavage_sites)
-    spans = build_enzymatic_spans(calculate_sequence_length(sequence), cleavage_sites, missed_cleavages, 1, None)
+    spans = list(pt.build_enzymatic_spans(pt.sequence_length(sequence), cleavage_sites, missed_cleavages, 1, None))
     df = pd.DataFrame(spans, columns=['Start', 'End', 'MC'])
-    df['Sequence'] = [span_to_sequence(sequence, span) for span in spans]
+    df['Sequence'] = [pt.span_to_sequence(sequence, span) for span in spans]
     df['Semi'] = 0
 
     if semi_enzymatic is True:
-        semi_spans = build_semi_spans(spans, min_len, max_len)
+        semi_spans = list(pt.build_semi_spans(spans, min_len, max_len))
         semi_df = pd.DataFrame(semi_spans, columns=['Start', 'End', 'MC'])
-        semi_df['Sequence'] = [span_to_sequence(sequence, span) for span in semi_spans]
+        semi_df['Sequence'] = [pt.span_to_sequence(sequence, span) for span in semi_spans]
         semi_df['Semi'] = 1
         df = pd.concat([df, semi_df], ignore_index=True)
 
@@ -46,18 +43,25 @@ def generate_peptide_df(sequence: str, cleavage_sites: List, missed_cleavages: i
 
     df = df[(df['Len'] >= min_len) & (df['Len'] <= max_len)]
 
-    df['Sequence'] = df['Sequence'].apply(lambda x: apply_static_modifications(x, static_mods))
+    df['Sequence'] = df['Sequence'].apply(lambda x: pt.apply_static_mods(x, static_mods))
 
-    df['NeutralMass'] = [round(calculate_mass(sequence, monoisotopic=is_mono), 5) for sequence in df['Sequence']]
+    df['NeutralMass'] = [round(pt.mass(sequence, monoisotopic=is_mono), 5) for sequence in df['Sequence']]
     df = df[(df['NeutralMass'] >= min_mass) & (df['NeutralMass'] <= max_mass)]
-    df['StrippedPeptide'] = df['Sequence'].apply(strip_modifications)
+    df['StrippedPeptide'] = df['Sequence'].apply(pt.strip_mods)
 
     if infer_charge is True:
         # charge should be the Lysine and Arginine count + 1
-        df['Charge'] = df['StrippedPeptide'].apply(lambda x: x.count('K') + x.count('R') + 1)
-        df['Mz'] = df['NeutralMass'] / df['Charge'] + df['Charge'] * 1.00727646677
+        df['base_charge'] = df['StrippedPeptide'].apply(lambda x: x.count('K') + x.count('R') + 1)
+        df['Charge'] = df['base_charge'].apply(lambda c: [i for i in range(c-plus_minus_charge, c+plus_minus_charge + 1)])
+        df = df.explode('Charge')
+        df['Charge'] = df['Charge'].astype(int)
+
+        df['Mz'] = (df['NeutralMass'] + df['Charge'] * pt.PROTON_MASS) / df['Charge']
         df = df[(df['Charge'] >= min_charge) & (df['Charge'] <= max_charge)]
         df = df[(df['Mz'] >= min_mz) & (df['Mz'] <= max_mz)]
+
+        #drop base_charge
+        df.drop(columns=['base_charge'], inplace=True)
 
     return df
 
