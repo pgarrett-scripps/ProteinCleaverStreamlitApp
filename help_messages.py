@@ -1,8 +1,8 @@
 # Help messages for input options
 
 # Protein input help messages
-PROTEIN_ID_HELP = 'A protein accession number / identifier'
-PROTEIN_SEQUENCE_HELP = 'An amino acid sequence to digest'
+PROTEIN_ID_HELP = "A protein accession number / identifier"
+PROTEIN_SEQUENCE_HELP = "An amino acid sequence to digest"
 
 # Protease help messages
 PROTEASES_HELP = "The proteases to use for digestion"
@@ -20,7 +20,9 @@ MAX_PEPTIDE_MASS_HELP = "Maximum peptide neutral mass (inclusive)"
 SEMI_ENZYMATIC_HELP = "Allow semi enzymatic peptides?"
 
 # Charge help messages
-INFER_CHARGE_HELP = "Infer charge of peptides based on +/- 1 of (#Lysines and #Arginines + 1)"
+INFER_CHARGE_HELP = (
+    "Infer charge of peptides based on +/- 1 of (#Lysines and #Arginines + 1)"
+)
 MIN_CHARGE_HELP = "Minimum peptide charge (inclusive)"
 MAX_CHARGE_HELP = "Maximum peptide charge (inclusive)"
 MIN_MZ_HELP = "Minimum peptide m/z (inclusive)"

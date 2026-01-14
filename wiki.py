@@ -182,7 +182,7 @@ the accuracy of peptide and protein identifications. However, in some cases, suc
 resolution instruments, it may be more appropriate to use average mass.
 """
 
-HELP ="""
+HELP = """
 ### Introduction to Protein Cleaver
 Protein Cleaver is a versatile tool for protein analysis and digestion. It offers a range of features to help users:
 
