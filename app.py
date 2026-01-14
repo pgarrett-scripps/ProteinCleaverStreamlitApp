@@ -2,7 +2,7 @@ from collections import Counter
 
 import pandas as pd
 import streamlit as st
-import streamlit_permalink as stp
+import streamlit as stp
 import peptacular as pt
 import matplotlib as mpl
 

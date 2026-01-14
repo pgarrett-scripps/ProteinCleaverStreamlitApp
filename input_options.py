@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import streamlit as st
-import streamlit_permalink as stp
+import streamlit as stp
 import constants as c
 
 import help_messages as h
