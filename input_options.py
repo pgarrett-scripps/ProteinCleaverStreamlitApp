@@ -177,24 +177,30 @@ def get_input_options():
             key="fetch_sequence",
         )
 
+    if "protein_sequence" not in st.session_state:
+        st.session_state["protein_sequence"] = c.DEFAULT_PROTEIN_SEQUENCE
+
+    # Handle fetch button
     if fetch_sequence:
         if protein_id:
             fetched_protein_sequence = fetch_sequence_from_uniprot(protein_id)
             if fetched_protein_sequence is not None:
-                st.query_params["protein_sequence"] = fetched_protein_sequence
-                st.rerun()
+                st.session_state["protein_sequence"] = fetched_protein_sequence
+                # No st.rerun() needed - just update session state
+            else:
+                st.error("Failed to fetch sequence from UniProt")
         else:
             st.error("Please enter a protein accession number")
 
-    protein_sequence = stp.text_area(
+    # Text area uses session state as value
+    protein_sequence = st.text_area(
         label="Protein Sequence (Proforma 2.0)",
-        value=c.DEFAULT_PROTEIN_SEQUENCE,
+        value=st.session_state["protein_sequence"],
         help=h.PROTEIN_SEQUENCE_HELP,
         key="protein_sequence",
         max_chars=c.MAX_PROTEIN_INPUT_LENGTH,
         height=200,
     )
-
     # remove all new lines / spaces from the sequence
     protein_sequence = protein_sequence.replace("\n", "").replace(" ", "")
 
